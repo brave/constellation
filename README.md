@@ -2,7 +2,7 @@
 
 Rust library for implementing _nested_ version of [STAR](https://arxiv.org/abs/2109.10074) protocol.
 
-All functionality is baded on the [sta-rs](https://github.com/brave-experiments/sta-rs) Rust library.
+All functionality is based on the [sta-rs](https://github.com/brave-experiments/sta-rs) Rust library.
 
 ## Disclaimer
 
