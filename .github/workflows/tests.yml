@@ -1,0 +1,59 @@
+on:
+  push:
+  pull_request:
+
+name: Tests
+
+jobs:
+  test:
+    name: ${{matrix.rust}} on ${{matrix.os}}
+    runs-on: ${{matrix.os}}
+
+    strategy:
+      matrix:
+        rust: [1.55.0]
+        os: [ubuntu-20.04]
+
+    env:
+      RUSTFLAGS: ''
+      CARGO_PROFILE_DEV_DEBUG: '0' # reduce size of target directory
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          components: clippy, rustfmt
+          toolchain: ${{matrix.rust}}
+          override: true
+
+      - name: Cache
+        uses: Swatinem/rust-cache@v1
+
+      - name: Format
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --all-targets
+
+      - name: Clippy
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --release --all-targets -- -D warnings -A clippy::too_many_arguments
+
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release
+
