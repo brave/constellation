@@ -12,16 +12,16 @@ use sta_rs::SingleMeasurement;
 #[derive(Serialize, Deserialize)]
 pub struct RandomnessSampling {
   input: Vec<Vec<u8>>,
-  epoch: String,
+  epoch: u8,
 }
 impl RandomnessSampling {
-  pub fn new(nm: &NestedMeasurement, epoch: &str) -> Self {
+  pub fn new(nm: &NestedMeasurement, epoch: u8) -> Self {
     Self {
       input: (0..nm.len())
         .into_iter()
         .map(|i| nm.get_layer_as_bytes(i))
         .collect(),
-      epoch: String::from(epoch),
+      epoch,
     }
   }
 
@@ -29,8 +29,8 @@ impl RandomnessSampling {
     self.input.clone()
   }
 
-  pub fn epoch(&self) -> &str {
-    &self.epoch
+  pub fn epoch(&self) -> u8 {
+    self.epoch
   }
 
   pub fn input_len(&self) -> usize {
@@ -55,7 +55,7 @@ impl From<&RandomnessSampling> for NestedMeasurement {
 pub struct MessageGeneration {
   input: Vec<Vec<u8>>,
   rand: Vec<[u8; RANDOMNESS_LEN]>,
-  epoch: String,
+  epoch: u8,
 }
 impl MessageGeneration {
   pub fn new(
@@ -71,7 +71,7 @@ impl MessageGeneration {
     Ok(Self {
       input: rsm.input.clone(),
       rand: input_rand,
-      epoch: String::from(rsm.epoch()),
+      epoch: rsm.epoch(),
     })
   }
 
@@ -79,8 +79,8 @@ impl MessageGeneration {
     self.rand.clone()
   }
 
-  pub fn epoch(&self) -> &str {
-    &self.epoch
+  pub fn epoch(&self) -> u8 {
+    self.epoch
   }
 
   pub fn input_len(&self) -> usize {

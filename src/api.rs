@@ -3,9 +3,9 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use crate::consts::*;
 use crate::errors::NestedSTARError;
 use crate::format::*;
+use crate::randomness;
 use crate::internal::NestedMeasurement;
 pub use crate::internal::{key_recover, recover};
 use crate::internal::{recover_partial_measurements, sample_layer_enc_keys};
@@ -18,7 +18,10 @@ pub use crate::internal::{NestedMessage, SerializableNestedMessage};
 /// The default implementations of each of the functions can be used
 /// for running an example Client. Each of these functions can be
 /// swapped out for alternative implementations.
-pub trait Client {
+pub trait Client<RF, T>
+where
+  RF: randomness::Fetcher<T>,
+{
   /// The function `format_measurement` takes a vector of measurement
   /// values (serialized as bytes), and an agreed threshold and epoch.
   /// Ultimately, the client constructs a nested measurement that is
@@ -28,7 +31,7 @@ pub trait Client {
   /// passed as input to `randomness_sampling()`.
   fn format_measurement(
     measurement: &[Vec<u8>],
-    epoch: &str,
+    epoch: u8,
   ) -> Result<RandomnessSampling, NestedSTARError> {
     let nm = NestedMeasurement::new(measurement)?;
     Ok(RandomnessSampling::new(&nm, epoch))
@@ -44,33 +47,13 @@ pub trait Client {
   /// `construct_message()`.
   fn sample_randomness(
     rsf: &RandomnessSampling,
-    _rs_url: &str,
+    fetcher: &RF,
   ) -> Result<MessageGeneration, NestedSTARError> {
-    let mut rnd_buf = [0u8; RANDOMNESS_LEN];
-    let mut rand_bytes: Vec<[u8; RANDOMNESS_LEN]> =
-      Vec::with_capacity(rsf.input_len());
-    if cfg!(test) {
-      // SHOULD ONLY BE USED FOR TESTING
-      let nm: NestedMeasurement = rsf.into();
-      for i in 0..nm.0.len() {
-        let cm = nm.0[0..i + 1]
-          .iter()
-          .fold(Vec::new() as Vec<u8>, |acc, r| [acc, r.as_vec()].concat());
-        sta_rs::strobe_digest(
-          &cm,
-          &[rsf.epoch().as_bytes()],
-          "star_sample_local",
-          &mut rnd_buf,
-        );
-        rand_bytes.push(rnd_buf);
-      }
-    } else {
-      // TODO: NEED TO IMPLEMENT OPRF RANDOMNESS call
-      unimplemented!("OPRF randomness");
-    }
+    // fetch randomness
+    let rand = fetcher.fetch(rsf)?;
 
-    // Get client aggregation message generation format
-    MessageGeneration::new(rsf, rand_bytes)
+    // output in client aggregation message generation format
+    MessageGeneration::new(rsf, rand)
   }
 
   /// In `construct_message` the client uses the output from
@@ -116,7 +99,7 @@ pub trait Server {
   fn aggregate(
     snms_serialized: &[Vec<u8>],
     threshold: u32,
-    epoch: &str,
+    epoch: u8,
     num_layers: usize,
   ) -> AggregationResult {
     let mut serde_errors = 0;
@@ -158,23 +141,71 @@ pub trait Server {
 
 #[cfg(test)]
 mod tests {
+  use super::randomness::{Fetcher, ServerInfo};
   use super::*;
+  use crate::consts::RANDOMNESS_LEN;
   use serde_json::Value;
 
+  struct TestFetcher {
+    url: String,
+  }
+  impl randomness::Fetcher<()> for TestFetcher {
+    fn new(_: randomness::ServerInfo<()>) -> Self {
+      Self {
+        url: "no_url_specified".into(),
+      }
+    }
+
+    fn url(&self) -> &str {
+      &self.url
+    }
+
+    fn public_key(&self) -> Option<()> {
+      None
+    }
+
+    // SHOULD ONLY BE USED FOR TESTING
+    fn fetch(
+      &self,
+      rsf: &crate::format::RandomnessSampling,
+    ) -> Result<Vec<[u8; RANDOMNESS_LEN]>, NestedSTARError> {
+      let mut rnd_buf = [0u8; RANDOMNESS_LEN];
+      let mut rand_bytes: Vec<[u8; RANDOMNESS_LEN]> =
+        Vec::with_capacity(rsf.input_len());
+      let nm: NestedMeasurement = rsf.into();
+      for m in nm.0.iter() {
+        sta_rs::strobe_digest(
+          m.as_slice(),
+          &[&[rsf.epoch()]],
+          "star_sample_local",
+          &mut rnd_buf,
+        );
+        rand_bytes.push(rnd_buf);
+      }
+      Ok(rand_bytes)
+    }
+  }
   struct TestClient {}
-  impl Client for TestClient {}
+  impl Client<TestFetcher, ()> for TestClient {}
   struct TestServer {}
   impl Server for TestServer {}
 
   #[test]
   fn basic_test() {
-    let epoch = "a";
+    let epoch = 0;
     let threshold = 1;
     let measurement =
       vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
     let aux = "added_data".as_bytes().to_vec();
     let rsf = TestClient::format_measurement(&measurement, epoch).unwrap();
-    let mgf = TestClient::sample_randomness(&rsf, "").unwrap();
+    let mgf = TestClient::sample_randomness(
+      &rsf,
+      &TestFetcher::new(ServerInfo::new(
+        "https://randomness.server".into(),
+        None,
+      )),
+    )
+    .unwrap();
     let msg = TestClient::construct_message(&mgf, &aux, threshold).unwrap();
     let agg_res =
       TestServer::aggregate(&[msg.as_bytes().to_vec()], threshold, epoch, 2);
@@ -189,19 +220,26 @@ mod tests {
   #[test]
   #[should_panic(expected = "called `Option::unwrap()` on a `None` value")]
   fn incompatible_epoch() {
-    let c_epoch = "a";
+    let c_epoch = 0u8;
     let threshold = 1;
     let measurement =
       vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
     let rsf = TestClient::format_measurement(&measurement, c_epoch).unwrap();
-    let mgf = TestClient::sample_randomness(&rsf, "").unwrap();
+    let mgf = TestClient::sample_randomness(
+      &rsf,
+      &TestFetcher::new(ServerInfo::new(
+        "https://randomness.server".into(),
+        None,
+      )),
+    )
+    .unwrap();
     let msg = TestClient::construct_message(&mgf, &[], threshold).unwrap();
-    TestServer::aggregate(&[msg.as_bytes().to_vec()], threshold, "b", 2);
+    TestServer::aggregate(&[msg.as_bytes().to_vec()], threshold, 1u8, 2);
   }
 
   #[test]
   fn incompatible_threshold() {
-    let epoch = "a";
+    let epoch = 0u8;
     let threshold = 3;
     let measurement =
       vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
@@ -209,7 +247,14 @@ mod tests {
       .into_iter()
       .map(|_| {
         let rsf = TestClient::format_measurement(&measurement, epoch).unwrap();
-        let mgf = TestClient::sample_randomness(&rsf, "").unwrap();
+        let mgf = TestClient::sample_randomness(
+          &rsf,
+          &TestFetcher::new(ServerInfo::new(
+            "https://randomness.server".into(),
+            None,
+          )),
+        )
+        .unwrap();
         TestClient::construct_message(&mgf, &[], threshold)
           .unwrap()
           .as_bytes()
@@ -244,7 +289,7 @@ mod tests {
   fn end_to_end_public_api(include_aux: bool, incl_failures: bool) {
     let threshold: u32 = 10;
     let num_layers = 3;
-    let epoch = "a";
+    let epoch = 0u8;
 
     // Sampling client measurements
     let total_num_measurements = 7;
@@ -309,7 +354,14 @@ mod tests {
       .iter()
       .map(|m| {
         let rsf = TestClient::format_measurement(m, epoch).unwrap();
-        let mgf = TestClient::sample_randomness(&rsf, "").unwrap();
+        let mgf = TestClient::sample_randomness(
+          &rsf,
+          &TestFetcher::new(ServerInfo::new(
+            "https://randomness.server".into(),
+            None,
+          )),
+        )
+        .unwrap();
         TestClient::construct_message(&mgf, &aux, threshold).unwrap()
       })
       .collect();
@@ -327,7 +379,14 @@ mod tests {
         epoch,
       )
       .unwrap();
-      let mgf = TestClient::sample_randomness(&rsf, "").unwrap();
+      let mgf = TestClient::sample_randomness(
+        &rsf,
+        &TestFetcher::new(ServerInfo::new(
+          "https://randomness.server".into(),
+          None,
+        )),
+      )
+      .unwrap();
       let msg = TestClient::construct_message(&mgf, &aux, threshold).unwrap();
       for _ in 0..threshold {
         client_messages.push(msg.clone());

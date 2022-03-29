@@ -50,12 +50,18 @@ impl NestedMeasurement {
   pub fn get_message_generators(
     &self,
     threshold: u32,
-    epoch: &str,
+    epoch: u8,
   ) -> Vec<MessageGenerator> {
     self
       .0
       .iter()
-      .map(|x| MessageGenerator::new(x.clone(), threshold, epoch))
+      .map(|x| {
+        MessageGenerator::new(
+          x.clone(),
+          threshold,
+          &String::from(epoch as char),
+        )
+      })
       .collect()
   }
 
@@ -391,7 +397,7 @@ impl IdentMessage {
 /// measurements according to the list of messages that it is provided.
 pub fn recover_partial_measurements(
   nested_messages: &[NestedMessage],
-  epoch: &str,
+  epoch: u8,
   threshold: u32,
   num_layers: usize,
 ) -> Vec<Result<PartialRecoveredMessage, NestedSTARError>> {
@@ -581,7 +587,7 @@ pub fn recover(
 /// Runs the standard STAR key recovery mechanism
 pub fn key_recover(
   layer: &[&Message],
-  epoch: &str,
+  epoch: u8,
 ) -> Result<Vec<u8>, NestedSTARError> {
   let mut result = vec![0u8; LAYER_ENC_KEY_LEN];
   let shares: Vec<Share> = layer.iter().map(|m| m.share.clone()).collect();
@@ -590,7 +596,7 @@ pub fn key_recover(
     return Err(NestedSTARError::ShareRecoveryFailedError);
   }
   let message = res.unwrap().get_message();
-  derive_ske_key(&message, epoch.as_bytes(), &mut result);
+  derive_ske_key(&message, &[epoch], &mut result);
   Ok(result)
 }
 
@@ -654,7 +660,7 @@ mod tests {
   #[test]
   fn bad_number_of_layer_enc_keys() {
     let threshold = 1;
-    let epoch = "t";
+    let epoch = 0u8;
     let (_, mgs, mut keys) =
       sample_client_measurement(&[1u8, 2u8, 3u8], 3, threshold, epoch);
     keys.pop();
@@ -670,7 +676,7 @@ mod tests {
   #[test]
   fn bad_number_of_randomness_byte_arrays() {
     let threshold = 1;
-    let epoch = "t";
+    let epoch = 0u8;
     let (_, mgs, keys) =
       sample_client_measurement(&[1u8, 2u8, 3u8], 3, threshold, epoch);
     let mut rand = sample_randomness(&mgs);
@@ -827,7 +833,7 @@ mod tests {
     threshold: usize,
     measurement_len: usize,
   ) -> (Vec<Option<FinalMeasurement>>, Vec<NestedMeasurement>) {
-    let epoch = "t";
+    let epoch = 0u8;
     let num_clients = inputs.len();
     let mut messages: Vec<NestedMessage> = Vec::new();
     let mut measurements = Vec::new();
@@ -896,7 +902,7 @@ mod tests {
     vals: &[u8],
     measurement_len: usize,
     threshold: u32,
-    epoch: &str,
+    epoch: u8,
   ) -> (NestedMeasurement, Vec<MessageGenerator>, Vec<Vec<u8>>) {
     let mut measurement: Vec<Vec<u8>> = Vec::new();
     for &x in vals.iter().take(measurement_len) {
@@ -910,7 +916,7 @@ mod tests {
 
   fn construct_message(aux: Option<Vec<u8>>) {
     let threshold = 1;
-    let epoch = "t";
+    let epoch = 0u8;
     let (nm, mgs, keys) =
       sample_client_measurement(&[1u8, 2u8, 3u8], 3, threshold, epoch);
 
@@ -924,9 +930,9 @@ mod tests {
       NestedMessage::new(&mgs, &rand, &keys, added_data).unwrap();
     let checks = vec![
       vec![
-        255, 194, 95, 20, 150, 227, 121, 57, 125, 212, 117, 192, 163, 161, 49,
-        44, 126, 155, 161, 158, 204, 246, 190, 224, 212, 75, 166, 193, 245, 28,
-        116, 177,
+        171, 38, 129, 158, 77, 71, 82, 131, 243, 52, 6, 92, 214, 67, 67, 126,
+        65, 245, 244, 10, 227, 83, 71, 88, 151, 34, 13, 132, 202, 224, 160,
+        119,
       ],
       vec![
         99, 167, 157, 94, 195, 62, 160, 82, 21, 126, 5, 145, 163, 153, 68, 143,
@@ -946,7 +952,7 @@ mod tests {
           .unwrap()
           .get_message();
       let mut star_key = vec![0u8; LAYER_ENC_KEY_LEN];
-      derive_ske_key(&value, epoch.as_bytes(), &mut star_key);
+      derive_ske_key(&value, &[epoch], &mut star_key);
       let res = nested_message
         .unencrypted_layer
         .ciphertext
