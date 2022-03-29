@@ -12,3 +12,4 @@ strobe-rs = "0.6.2"
 sta-rs = { git = "https://github.com/brave-experiments/sta-rs", branch = "public-api-changes" }
 rand_core = "0.6.2"
 rand = { version = "0.7" }
+bincode = "1.3"

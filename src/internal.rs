@@ -2,11 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::convert::TryInto;
 
-use serde::{
-  de,
-  ser::{self, SerializeSeq},
-  Deserialize, Serialize,
-};
+use serde::{Deserialize, Serialize};
 use sta_rs::{
   derive_ske_key, load_bytes, share_recover, AssociatedData, Ciphertext,
   Message, MessageGenerator, Share, SingleMeasurement,
@@ -45,11 +41,7 @@ impl NestedMeasurement {
       })
       .collect();
     // create partial measurements
-    for i in 0..padded.len() {
-      let x = padded[0..i + 1]
-        .to_vec()
-        .iter()
-        .fold(Vec::new() as Vec<u8>, |acc, r| [acc, r.to_vec()].concat());
+    for x in padded {
       measurements.push(SingleMeasurement::new(&x));
     }
     Ok(Self(measurements))
@@ -92,14 +84,8 @@ impl NestedMeasurement {
 /// STAR messages during encryption/decryption.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct SerializableMessage {
-  #[serde(deserialize_with = "vec_base64_deserialize")]
-  #[serde(serialize_with = "vec_base64_serialize")]
   ciphertext: Vec<u8>,
-  #[serde(deserialize_with = "vec_base64_deserialize")]
-  #[serde(serialize_with = "vec_base64_serialize")]
   share: Vec<u8>,
-  #[serde(deserialize_with = "vec_base64_deserialize")]
-  #[serde(serialize_with = "vec_base64_serialize")]
   tag: Vec<u8>,
 }
 impl From<SerializableMessage> for Message {
@@ -127,8 +113,8 @@ impl From<Message> for SerializableMessage {
 /// recovery mechanism.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NestedMessage {
-  unencrypted_layer: Message,
-  encrypted_layers: Vec<Ciphertext>,
+  pub unencrypted_layer: Message,
+  pub encrypted_layers: Vec<Ciphertext>,
 }
 impl NestedMessage {
   pub fn new(
@@ -170,7 +156,7 @@ impl NestedMessage {
         data: aux_data.to_vec(),
       };
       let message_aux = Some(AssociatedData::new(
-        serde_json::to_string(&nested_aux).unwrap().as_bytes(),
+        &bincode::serialize(&nested_aux).unwrap(),
       ));
 
       // generate message
@@ -181,7 +167,7 @@ impl NestedMessage {
       if i > 0 {
         // serialize message
         let bytes_to_encrypt =
-          serde_json::to_vec(&SerializableMessage::from(message)).unwrap();
+          bincode::serialize(&SerializableMessage::from(message)).unwrap();
         let encrypted_layer = Ciphertext::new(
           &keys[i - 1],
           &bytes_to_encrypt,
@@ -207,7 +193,7 @@ impl NestedMessage {
     }
     let decrypted =
       self.encrypted_layers[0].decrypt(key, NESTED_STAR_ENCRYPTION_LABEL);
-    let sm: SerializableMessage = serde_json::from_slice(&decrypted).unwrap();
+    let sm: SerializableMessage = bincode::deserialize(&decrypted).unwrap();
     self.unencrypted_layer = sm.into();
     self.encrypted_layers = self.encrypted_layers[1..].to_vec();
   }
@@ -217,8 +203,6 @@ impl NestedMessage {
 #[derive(Serialize, Deserialize)]
 pub struct SerializableNestedMessage {
   unencrypted_layer: SerializableMessage,
-  #[serde(deserialize_with = "nested_vec_base64_deserialize")]
-  #[serde(serialize_with = "nested_vec_base64_serialize")]
   encrypted_layers: Vec<Vec<u8>>,
 }
 impl From<SerializableNestedMessage> for NestedMessage {
@@ -274,12 +258,12 @@ pub struct NestedAssociatedData {
 /// Internal struct that contains the partial measurement at a given
 /// layer, plus the encryption key for decrypting the next layer.
 #[derive(Clone, Debug)]
-struct PartialMeasurement {
+pub struct PartialMeasurement {
   measurement: NestedMeasurement,
   aux: NestedAssociatedData,
 }
 impl PartialMeasurement {
-  fn get_next_layer_key(&self) -> &Option<Vec<u8>> {
+  pub fn get_next_layer_key(&self) -> &Option<Vec<u8>> {
     &self.aux.key
   }
 }
@@ -458,9 +442,18 @@ pub fn recover_partial_measurements(
           })
           .collect();
 
+        let key = match key_recover(&messages, epoch) {
+          Err(e) => {
+            indices
+              .iter()
+              .for_each(|&idx| measurements[idx] = Err(e.clone()));
+            continue;
+          }
+          Ok(k) => k,
+        };
         // returns an ordered vector of partial measurements for
         // the current leaf
-        let res_pms = recover(&messages, epoch, layer_idx);
+        let res_pms = recover(&messages, &key);
         if let Err(e) = res_pms {
           indices
             .iter()
@@ -535,43 +528,26 @@ pub fn sample_layer_enc_keys(num_layers: usize) -> Vec<Vec<u8>> {
 
 /// Run the standard star recovery procedure for an array of STAR
 /// messages
-fn recover(
+pub fn recover(
   subset: &[&Message],
-  epoch: &str,
-  layer_idx: usize,
+  key: &[u8],
 ) -> Result<Vec<PartialMeasurement>, NestedSTARError> {
-  let mut enc_key_buf = vec![0u8; LAYER_ENC_KEY_LEN];
-  if let Err(e) = key_recover(subset, epoch, &mut enc_key_buf) {
-    return Err(e);
-  }
-
   let ciphertexts = subset.iter().map(|t| t.ciphertext.clone());
-  let plaintexts = ciphertexts.map(|c| c.decrypt(&enc_key_buf, "star_encrypt"));
+  let plaintexts = ciphertexts.map(|c| c.decrypt(key, "star_encrypt"));
 
-  let splits: Vec<(Vec<Vec<u8>>, NestedAssociatedData)> = plaintexts
+  let splits: Vec<(Vec<u8>, NestedAssociatedData)> = plaintexts
     .map(|slice| {
       // parse all measurement bytes we discard the first four
       // bytes, these give the length, but for now the length of
       // each entry is fixed as 32 bytes
-      let bytes = slice[..4 + MAX_MEASUREMENT_LEN * (layer_idx + 1)].to_vec();
-      let measurement_bytes = load_bytes(&bytes).unwrap();
-
-      // get measurement vector
-      let mut measurement_vec: Vec<Vec<u8>> = Vec::with_capacity(layer_idx + 1);
-      for i in 0..layer_idx + 1 {
-        measurement_vec.push(
-          measurement_bytes
-            [i * MAX_MEASUREMENT_LEN..(i + 1) * MAX_MEASUREMENT_LEN]
-            .to_vec(),
-        );
-      }
+      let bytes = slice[..4 + MAX_MEASUREMENT_LEN].to_vec();
+      let measurement_bytes = load_bytes(&bytes).unwrap().to_vec();
 
       // parse remaining bytes of auxiliary data
       let rem = &slice[4 + measurement_bytes.len() as usize..];
       let aux_bytes = load_bytes(rem).unwrap();
-      let aux: NestedAssociatedData =
-        serde_json::from_slice(aux_bytes).unwrap();
-      (measurement_vec, aux)
+      let aux: NestedAssociatedData = bincode::deserialize(aux_bytes).unwrap();
+      (measurement_bytes, aux)
     })
     .collect();
 
@@ -580,17 +556,8 @@ fn recover(
   for new_measurement in splits.iter().skip(1) {
     if &new_measurement.0 != measurement {
       return Err(NestedSTARError::ClientMeasurementMismatchError(
-        base64::encode(
-          measurement
-            .iter()
-            .fold(Vec::new(), |acc, r| [acc, r.to_vec()].concat()),
-        ),
-        base64::encode(
-          new_measurement
-            .0
-            .iter()
-            .fold(Vec::new(), |acc, r| [acc, r.to_vec()].concat()),
-        ),
+        base64::encode(measurement),
+        base64::encode(&new_measurement.0),
       ));
     }
   }
@@ -598,12 +565,13 @@ fn recover(
   // Output all partial measurements and associated auxiliary data
   Ok(
     splits
-      .iter()
-      .map(|x| {
-        let nm = NestedMeasurement::new(&x.0).unwrap();
+      .into_iter()
+      .map(|(measurement_bytes, aux)| {
+        let y = vec![measurement_bytes];
+        let nm = NestedMeasurement::new(&y).unwrap();
         PartialMeasurement {
           measurement: nm,
-          aux: x.1.clone(),
+          aux,
         }
       })
       .collect(),
@@ -611,19 +579,19 @@ fn recover(
 }
 
 /// Runs the standard STAR key recovery mechanism
-fn key_recover(
+pub fn key_recover(
   layer: &[&Message],
   epoch: &str,
-  enc_key: &mut [u8],
-) -> Result<(), NestedSTARError> {
+) -> Result<Vec<u8>, NestedSTARError> {
+  let mut result = vec![0u8; LAYER_ENC_KEY_LEN];
   let shares: Vec<Share> = layer.iter().map(|m| m.share.clone()).collect();
   let res = share_recover(&shares);
   if res.is_err() {
     return Err(NestedSTARError::ShareRecoveryFailedError);
   }
   let message = res.unwrap().get_message();
-  derive_ske_key(&message, epoch.as_bytes(), enc_key);
-  Ok(())
+  derive_ske_key(&message, epoch.as_bytes(), &mut result);
+  Ok(result)
 }
 
 /// Filters out subsets of matching STAR messages that are smaller than
@@ -653,45 +621,6 @@ fn group_messages(node: &[IdentMessage]) -> Vec<Vec<usize>> {
   grouped.values().cloned().collect()
 }
 
-fn vec_base64_deserialize<'de, D>(d: D) -> Result<Vec<u8>, D::Error>
-where
-  D: de::Deserializer<'de>,
-{
-  let s: &str = de::Deserialize::deserialize(d)?;
-  base64::decode(s).map_err(de::Error::custom)
-}
-
-fn vec_base64_serialize<S>(v: &[u8], s: S) -> Result<S::Ok, S::Error>
-where
-  S: ser::Serializer,
-{
-  s.serialize_str(&base64::encode(v))
-}
-
-fn nested_vec_base64_deserialize<'de, D>(d: D) -> Result<Vec<Vec<u8>>, D::Error>
-where
-  D: de::Deserializer<'de>,
-{
-  let s: Vec<&str> = de::Deserialize::deserialize(d)?;
-  s.iter()
-    .map(|v| base64::decode(v).map_err(de::Error::custom))
-    .collect::<Result<Vec<Vec<u8>>, D::Error>>()
-}
-
-fn nested_vec_base64_serialize<S>(
-  v: &[Vec<u8>],
-  s: S,
-) -> Result<S::Ok, S::Error>
-where
-  S: ser::Serializer,
-{
-  let mut seq = s.serialize_seq(Some(v.len()))?;
-  for element in v {
-    seq.serialize_element(&base64::encode(element))?;
-  }
-  seq.end()
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -706,22 +635,8 @@ mod tests {
     ];
     let nm = NestedMeasurement::new(measurement.as_slice()).unwrap();
     assert_eq!(nm.0[0].as_vec(), measurement[0].to_vec());
-    assert_eq!(
-      nm.0[1].as_vec(),
-      [measurement[0].as_slice(), measurement[1].as_slice()]
-        .concat()
-        .to_vec()
-    );
-    assert_eq!(
-      nm.0[2].as_vec(),
-      [
-        measurement[0].as_slice(),
-        measurement[1].as_slice(),
-        measurement[2].as_slice()
-      ]
-      .concat()
-      .to_vec()
-    );
+    assert_eq!(nm.0[1].as_vec(), measurement[1].to_vec());
+    assert_eq!(nm.0[2].as_vec(), measurement[2].to_vec());
   }
 
   #[test]
@@ -955,15 +870,12 @@ mod tests {
     if !revealed {
       assert!(output.is_none());
     } else {
-      let revealed_len = revealed_len.unwrap();
       let revealed_output = output.as_ref().unwrap();
-      assert_eq!(revealed_output.measurement.len(), revealed_len);
-      for j in 0..revealed_len {
-        assert_eq!(
-          revealed_output.get_partial_measurement_raw(j),
-          measurement.get_layer_as_bytes(j)
-        );
-      }
+      assert_eq!(revealed_output.measurement.len(), 1);
+      assert_eq!(
+        revealed_output.get_partial_measurement_raw(0),
+        measurement.get_layer_as_bytes(revealed_len.unwrap() - 1)
+      );
     }
   }
 
@@ -1017,13 +929,13 @@ mod tests {
         116, 177,
       ],
       vec![
-        248, 60, 248, 138, 210, 202, 142, 151, 197, 179, 230, 243, 171, 95, 86,
-        234, 47, 104, 182, 16, 32, 118, 177, 147, 140, 0, 182, 67, 33, 204,
-        120, 96,
+        99, 167, 157, 94, 195, 62, 160, 82, 21, 126, 5, 145, 163, 153, 68, 143,
+        179, 3, 131, 121, 77, 232, 77, 5, 182, 246, 18, 218, 161, 186, 156, 90,
       ],
       vec![
-        17, 150, 236, 240, 146, 21, 99, 168, 102, 13, 21, 6, 213, 125, 227, 85,
-        66, 113, 32, 19, 11, 41, 76, 228, 165, 164, 205, 154, 208, 11, 137, 90,
+        18, 248, 211, 66, 185, 112, 237, 76, 24, 246, 176, 127, 16, 146, 195,
+        7, 88, 204, 227, 163, 165, 95, 93, 36, 62, 171, 27, 140, 56, 30, 88,
+        230,
       ],
     ];
     let aux_ref = aux.as_ref();
@@ -1041,11 +953,11 @@ mod tests {
         .decrypt(&star_key, "star_encrypt");
 
       // check measurement value first 4 bytes are just for length
-      let res_measurement = res[4..4 + MAX_MEASUREMENT_LEN * (i + 1)].to_vec();
+      let res_measurement = res[4..4 + MAX_MEASUREMENT_LEN].to_vec();
       assert_eq!(res_measurement, nm.get_layer_as_bytes(i));
 
       // check aux data
-      let res_aux = res[4 + MAX_MEASUREMENT_LEN * (i + 1)..].to_vec();
+      let res_aux = res[4 + MAX_MEASUREMENT_LEN..].to_vec();
       let mut add_data = NestedAssociatedData {
         key: None,
         data: vec![],
@@ -1059,11 +971,11 @@ mod tests {
         add_data.data = vec![];
       }
       let aux_check_bytes = load_bytes(&res_aux).unwrap();
-      let serialized_aux = serde_json::to_vec(&add_data).unwrap();
+      let serialized_aux = bincode::serialize(&add_data).unwrap();
       assert_eq!(aux_check_bytes.len() as usize, serialized_aux.len());
       assert_eq!(aux_check_bytes, serialized_aux);
       let add_data_unserialized: NestedAssociatedData =
-        serde_json::from_slice(&serialized_aux).unwrap();
+        bincode::deserialize(&serialized_aux).unwrap();
       assert_eq!(add_data_unserialized.key, add_data.key);
       assert_eq!(add_data_unserialized.data, add_data.data);
 
