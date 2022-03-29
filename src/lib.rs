@@ -71,7 +71,10 @@
 //!
 //! let measurements = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
 //! let rsf = ExampleClient::format_measurement(&measurements, epoch).unwrap();
-//! let mgf = ExampleClient::sample_randomness(&rsf, &RandomnessFetcher::new(server_info.clone())).unwrap();
+//! let mgf = ExampleClient::sample_randomness(
+//!   &rsf,
+//!   &RandomnessFetcher::new(server_info.clone()),
+//! ).unwrap();
 //! ExampleClient::construct_message(&mgf, &example_aux, threshold).unwrap();
 //! ```
 //!
@@ -141,7 +144,10 @@
 //! let client_messages_to_reveal: Vec<Vec<u8>> = (0..threshold).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
 //!   let rsf = ExampleClient::format_measurement(&measurements_1, epoch).unwrap();
-//!   let mgf = ExampleClient::sample_randomness(&rsf, &RandomnessFetcher::new(server_info.clone())).unwrap();
+//!   let mgf = ExampleClient::sample_randomness(
+//!     &rsf,
+//!     &RandomnessFetcher::new(server_info.clone()),
+//!   ).unwrap();
 //!   ExampleClient::construct_message(
 //!     &mgf,
 //!     &example_aux,
@@ -154,7 +160,10 @@
 //! let client_messages_to_hide: Vec<Vec<u8>> = (0..2).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
 //!   let rsf = ExampleClient::format_measurement(&measurements_2, epoch).unwrap();
-//!   let mgf = ExampleClient::sample_randomness(&rsf, &RandomnessFetcher::new(server_info.clone())).unwrap();
+//!   let mgf = ExampleClient::sample_randomness(
+//!     &rsf,
+//!     &RandomnessFetcher::new(server_info.clone()),
+//!   ).unwrap();
 //!   ExampleClient::construct_message(
 //!     &mgf,
 //!     &example_aux,
@@ -239,7 +248,10 @@
 //! let client_messages_1: Vec<Vec<u8>> = (0..5).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
 //!   let rsf = ExampleClient::format_measurement(&measurements_1, epoch).unwrap();
-//!   let mgf = ExampleClient::sample_randomness(&rsf, &RandomnessFetcher::new(server_info.clone())).unwrap();
+//!   let mgf = ExampleClient::sample_randomness(
+//!     &rsf,
+//!     &RandomnessFetcher::new(server_info.clone()),
+//!   ).unwrap();
 //!   ExampleClient::construct_message(
 //!     &mgf,
 //!     &example_aux,
@@ -252,7 +264,10 @@
 //! let client_messages_2: Vec<Vec<u8>> = (0..5).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
 //!   let rsf = ExampleClient::format_measurement(&measurements_2, epoch).unwrap();
-//!   let mgf = ExampleClient::sample_randomness(&rsf, &RandomnessFetcher::new(server_info.clone())).unwrap();
+//!   let mgf = ExampleClient::sample_randomness(
+//!     &rsf,
+//!     &RandomnessFetcher::new(server_info.clone()),
+//!   ).unwrap();
 //!   ExampleClient::construct_message(
 //!     &mgf,
 //!     &example_aux,
