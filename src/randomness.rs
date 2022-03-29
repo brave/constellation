@@ -1,21 +1,23 @@
 use crate::consts::RANDOMNESS_LEN;
 use crate::errors::NestedSTARError;
 use ppoprf::ppoprf;
-use rand_core::{OsRng, RngCore};
 use reqwest::blocking::Client as HttpClient;
 use serde::{Deserialize, Serialize};
+
+const QUERY_LABEL: &str = "";
+const RESPONSE_LABEL: &str = "";
 
 /// Explicit query body.
 #[derive(Serialize)]
 struct Query {
-  nonce: [u8; 16],
+  name: String,
   points: Vec<ppoprf::Point>,
 }
 
 /// Explicit response body.
 #[derive(Deserialize)]
 struct Response {
-  nonce: [u8; 16],
+  name: String,
   results: Vec<ppoprf::Evaluation>,
 }
 
@@ -101,10 +103,8 @@ impl Fetcher<ppoprf::ServerPublicKey> for PPOPRFFetcher {
     }
 
     // convert blinded points into a single response
-    let mut nonce = [0u8; 16];
-    OsRng.fill_bytes(&mut nonce);
     let query = Query {
-      nonce,
+      name: QUERY_LABEL.into(),
       points: blinded_points,
     };
 
@@ -125,8 +125,8 @@ impl Fetcher<ppoprf::ServerPublicKey> for PPOPRFFetcher {
         match resp.json::<Response>() {
           Ok(r) => {
             // Check that response is well-formed
-            if r.nonce != nonce {
-              return Err(NestedSTARError::RandomnessSamplingError(format!("Server returned nonce ({:?}) doesn't match client nonce ({:?})", r.nonce, nonce)));
+            if r.name != RESPONSE_LABEL {
+              return Err(NestedSTARError::RandomnessSamplingError(format!("Incorrect response label specified: {}", r.name)));
             }
             let results = r.results;
             if results.len() != measurements.len() {
@@ -175,3 +175,6 @@ impl Fetcher<ppoprf::ServerPublicKey> for PPOPRFFetcher {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {}
