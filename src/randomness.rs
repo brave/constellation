@@ -64,7 +64,7 @@ pub trait Fetcher<T> {
 
 /// The `PPOPRFFetcher` provides a default implementation of the
 /// randomness fetcher trait, using reqwest for launching queries to a
-/// randomness server that runs a PPOPRF protocol. 
+/// randomness server that runs a PPOPRF protocol.
 pub struct PPOPRFFetcher {
   url: String,
   public_key: Option<ppoprf::ServerPublicKey>,

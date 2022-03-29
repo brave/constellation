@@ -5,11 +5,11 @@ use std::collections::HashMap;
 
 use crate::errors::NestedSTARError;
 use crate::format::*;
-use crate::randomness;
 use crate::internal::NestedMeasurement;
 pub use crate::internal::{key_recover, recover};
 use crate::internal::{recover_partial_measurements, sample_layer_enc_keys};
 pub use crate::internal::{NestedMessage, SerializableNestedMessage};
+use crate::randomness;
 
 /// The `Client` trait wraps all API functions used by clients for
 /// constructing their aggregation messages relative to the
