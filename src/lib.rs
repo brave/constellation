@@ -25,57 +25,29 @@
 //!
 //! ```
 //! # use nested_sta_rs::api::*;
-//! # use nested_sta_rs::api::randomness::*;
+//! # use nested_sta_rs::randomness::*;
+//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
 //! # use nested_sta_rs::consts::*;
 //! # use nested_sta_rs::errors::*;
 //! # use nested_sta_rs::format::*;
 //! #
-//! # struct RandomnessFetcher {
-//! #   url: String
-//! # }
-//! # impl Fetcher<()> for RandomnessFetcher {
-//! #   fn new(info: ServerInfo<()>) -> Self {
-//! #     Self { url: info.url().to_string() }
-//! #   }
-//! #   
-//! #   fn url(&self) -> &str {
-//! #     &self.url
-//! #   }
-//! #
-//! #   fn public_key(&self) -> Option<()> {
-//! #     None
-//! #   }
-//! #
-//! #   // SHOULD ONLY BE USED FOR TESTING
-//! #   fn fetch(&self, rsf: &RandomnessSampling) -> Result<Vec<[u8; RANDOMNESS_LEN]>, NestedSTARError> {
-//! #     let mut rand_bytes: Vec<[u8; RANDOMNESS_LEN]> = Vec::with_capacity(rsf.input_len());
-//! #     for i in 0..rsf.input_len() {
-//! #         // NEVER DO THIS
-//! #         let input = rsf.input()[i].clone();
-//! #         let mut rnd_buf = [0u8; RANDOMNESS_LEN];
-//! #         rnd_buf.copy_from_slice(&input[input.len()-32..]);
-//! #         rand_bytes.push(rnd_buf.clone());
-//! #     }
-//! #     Ok(rand_bytes)
-//! #   }
-//! # }
 //! # let public_key = None;
 //! struct ExampleClient {}
-//! impl Client<RandomnessFetcher,()> for ExampleClient {}
+//! impl Client<RandomnessFetcher> for ExampleClient {}
 //! let threshold = 10;
 //! let epoch = 0u8;
 //!
 //! // setup randomness server information
-//! let server_info = ServerInfo::new("https://randomness.server".into(), public_key);
 //! let example_aux = vec![1u8; 3];
 //!
 //! let measurements = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
 //! let rsf = ExampleClient::format_measurement(&measurements, epoch).unwrap();
 //! let mgf = ExampleClient::sample_randomness(
-//!   &rsf,
-//!   &RandomnessFetcher::new(server_info.clone()),
+//!   "https://randomness.server",
+//!   rsf,
+//!   &public_key,
 //! ).unwrap();
-//! ExampleClient::construct_message(&mgf, &example_aux, threshold).unwrap();
+//! ExampleClient::construct_message(mgf, &example_aux, threshold).unwrap();
 //! ```
 //!
 //! ### Server
@@ -93,51 +65,20 @@
 //!
 //! ```
 //! # use nested_sta_rs::api::*;
-//! # use nested_sta_rs::api::randomness::*;
+//! # use nested_sta_rs::randomness::*;
+//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
 //! # use nested_sta_rs::consts::*;
 //! # use nested_sta_rs::errors::*;
 //! # use nested_sta_rs::format::*;
 //! #
-//! # struct RandomnessFetcher {
-//! #   url: String
-//! # }
-//! # impl Fetcher<()> for RandomnessFetcher {
-//! #   fn new(info: ServerInfo<()>) -> Self {
-//! #     Self { url: info.url().to_string() }
-//! #   }
-//! #   
-//! #   fn url(&self) -> &str {
-//! #     &self.url
-//! #   }
-//! #
-//! #   fn public_key(&self) -> Option<()> {
-//! #     None
-//! #   }
-//! #
-//! #   // SHOULD ONLY BE USED FOR TESTING
-//! #   fn fetch(&self, rsf: &RandomnessSampling) -> Result<Vec<[u8; RANDOMNESS_LEN]>, NestedSTARError> {
-//! #     let mut rand_bytes: Vec<[u8; RANDOMNESS_LEN]> = Vec::with_capacity(rsf.input_len());
-//! #     for i in 0..rsf.input_len() {
-//! #         // NEVER DO THIS
-//! #         let input = rsf.input()[i].clone();
-//! #         let mut rnd_buf = [0u8; RANDOMNESS_LEN];
-//! #         rnd_buf.copy_from_slice(&input[input.len()-32..]);
-//! #         rand_bytes.push(rnd_buf.clone());
-//! #     }
-//! #     Ok(rand_bytes)
-//! #   }
-//! # }
 //! # let public_key = None;
 //! struct ExampleClient {}
-//! impl Client<RandomnessFetcher,()> for ExampleClient {}
+//! impl Client<RandomnessFetcher> for ExampleClient {}
 //! struct ExampleServer {}
 //! impl Server for ExampleServer {}
 //!
 //! let threshold = 10;
 //! let epoch = 0u8;
-//!
-//! // setup randomness server information
-//! let server_info = ServerInfo::new("https://randomness.server".into(), public_key);
 //!
 //! // construct at least `threshold` client messages with the same measurement
 //! let measurements_1 = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
@@ -145,11 +86,12 @@
 //!   let example_aux = vec![i as u8; 3];
 //!   let rsf = ExampleClient::format_measurement(&measurements_1, epoch).unwrap();
 //!   let mgf = ExampleClient::sample_randomness(
-//!     &rsf,
-//!     &RandomnessFetcher::new(server_info.clone()),
+//!     "https://randomness.server",
+//!     rsf,
+//!     &public_key
 //!   ).unwrap();
 //!   ExampleClient::construct_message(
-//!     &mgf,
+//!     mgf,
 //!     &example_aux,
 //!     threshold,
 //!   ).unwrap().as_bytes().to_vec()
@@ -161,11 +103,12 @@
 //!   let example_aux = vec![i as u8; 3];
 //!   let rsf = ExampleClient::format_measurement(&measurements_2, epoch).unwrap();
 //!   let mgf = ExampleClient::sample_randomness(
-//!     &rsf,
-//!     &RandomnessFetcher::new(server_info.clone()),
+//!     "https://randomness.server",
+//!     rsf,
+//!     &public_key
 //!   ).unwrap();
 //!   ExampleClient::construct_message(
-//!     &mgf,
+//!     mgf,
 //!     &example_aux,
 //!     threshold,
 //!   ).unwrap().as_bytes().to_vec()
@@ -197,51 +140,20 @@
 //!
 //! ```
 //! # use nested_sta_rs::api::*;
-//! # use nested_sta_rs::api::randomness::*;
+//! # use nested_sta_rs::randomness::*;
+//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
 //! # use nested_sta_rs::consts::*;
 //! # use nested_sta_rs::errors::*;
 //! # use nested_sta_rs::format::*;
 //! #
-//! # struct RandomnessFetcher {
-//! #   url: String
-//! # }
-//! # impl Fetcher<()> for RandomnessFetcher {
-//! #   fn new(info: ServerInfo<()>) -> Self {
-//! #     Self { url: info.url().to_string() }
-//! #   }
-//! #   
-//! #   fn url(&self) -> &str {
-//! #     &self.url
-//! #   }
-//! #
-//! #   fn public_key(&self) -> Option<()> {
-//! #     None
-//! #   }
-//! #
-//! #   // SHOULD ONLY BE USED FOR TESTING
-//! #   fn fetch(&self, rsf: &RandomnessSampling) -> Result<Vec<[u8; RANDOMNESS_LEN]>, NestedSTARError> {
-//! #     let mut rand_bytes: Vec<[u8; RANDOMNESS_LEN]> = Vec::with_capacity(rsf.input_len());
-//! #     for i in 0..rsf.input_len() {
-//! #         // NEVER DO THIS
-//! #         let input = rsf.input()[i].clone();
-//! #         let mut rnd_buf = [0u8; RANDOMNESS_LEN];
-//! #         rnd_buf.copy_from_slice(&input[input.len()-32..]);
-//! #         rand_bytes.push(rnd_buf.clone());
-//! #     }
-//! #     Ok(rand_bytes)
-//! #   }
-//! # }
 //! # let public_key = None;
 //! struct ExampleClient {}
-//! impl Client<RandomnessFetcher,()> for ExampleClient {}
+//! impl Client<RandomnessFetcher> for ExampleClient {}
 //! struct ExampleServer {}
 //! impl Server for ExampleServer {}
 //!
 //! let threshold = 10;
 //! let epoch = 0u8;
-//!
-//! // setup randomness server information
-//! let server_info = ServerInfo::new("https://randomness.server".into(), public_key);
 //!
 //! // construct a low number client messages with the same measurement
 //! let measurements_1 = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
@@ -249,11 +161,12 @@
 //!   let example_aux = vec![i as u8; 3];
 //!   let rsf = ExampleClient::format_measurement(&measurements_1, epoch).unwrap();
 //!   let mgf = ExampleClient::sample_randomness(
-//!     &rsf,
-//!     &RandomnessFetcher::new(server_info.clone()),
+//!     "https://randomness.server",
+//!     rsf,
+//!     &public_key
 //!   ).unwrap();
 //!   ExampleClient::construct_message(
-//!     &mgf,
+//!     mgf,
 //!     &example_aux,
 //!     threshold
 //!   ).unwrap().as_bytes().to_vec()
@@ -265,11 +178,12 @@
 //!   let example_aux = vec![i as u8; 3];
 //!   let rsf = ExampleClient::format_measurement(&measurements_2, epoch).unwrap();
 //!   let mgf = ExampleClient::sample_randomness(
-//!     &rsf,
-//!     &RandomnessFetcher::new(server_info.clone()),
+//!     "https://randomness.server",
+//!     rsf,
+//!     &public_key
 //!   ).unwrap();
 //!   ExampleClient::construct_message(
-//!     &mgf,
+//!     mgf,
 //!     &example_aux,
 //!     threshold
 //!   ).unwrap().as_bytes().to_vec()

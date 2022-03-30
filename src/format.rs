@@ -9,7 +9,7 @@ use sta_rs::SingleMeasurement;
 
 // Serialized format that includes the result of `NestedMeasurement` and
 // is compatible with randomness server interactions
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct RandomnessSampling {
   input: Vec<Vec<u8>>,
   epoch: u8,
@@ -51,7 +51,7 @@ impl From<&RandomnessSampling> for NestedMeasurement {
 
 // Serialized format of `NestedMeasurement` that is compatible with
 // randomness server interactions
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct MessageGeneration {
   input: Vec<Vec<u8>>,
   rand: Vec<[u8; RANDOMNESS_LEN]>,
@@ -59,19 +59,19 @@ pub struct MessageGeneration {
 }
 impl MessageGeneration {
   pub fn new(
-    rsm: &RandomnessSampling,
+    rsf: RandomnessSampling,
     input_rand: Vec<[u8; RANDOMNESS_LEN]>,
   ) -> Result<Self, NestedSTARError> {
-    if rsm.input_len() != input_rand.len() {
+    if rsf.input_len() != input_rand.len() {
       return Err(NestedSTARError::NumMeasurementLayersError(
-        rsm.input_len(),
+        rsf.input_len(),
         input_rand.len(),
       ));
     }
     Ok(Self {
-      input: rsm.input.clone(),
+      input: rsf.input.clone(),
       rand: input_rand,
-      epoch: rsm.epoch(),
+      epoch: rsf.epoch(),
     })
   }
 
@@ -87,8 +87,8 @@ impl MessageGeneration {
     self.input.len()
   }
 }
-impl From<&MessageGeneration> for NestedMeasurement {
-  fn from(rsm: &MessageGeneration) -> NestedMeasurement {
+impl From<MessageGeneration> for NestedMeasurement {
+  fn from(rsm: MessageGeneration) -> NestedMeasurement {
     NestedMeasurement(
       rsm
         .input
