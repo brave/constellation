@@ -32,8 +32,6 @@
 //! # use nested_sta_rs::format::*;
 //! #
 //! # let public_key = None;
-//! struct ExampleClient {}
-//! impl Client<RandomnessFetcher> for ExampleClient {}
 //! let threshold = 10;
 //! let epoch = 0u8;
 //!
@@ -41,13 +39,13 @@
 //! let example_aux = vec![1u8; 3];
 //!
 //! let measurements = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
-//! let rsf = ExampleClient::format_measurement(&measurements, epoch).unwrap();
-//! let mgf = ExampleClient::sample_randomness(
-//!   "https://randomness.server",
+//! let rsf = client::format_measurement(&measurements, epoch).unwrap();
+//! let mgf = client::sample_randomness(
+//!   &RandomnessFetcher::new(),
 //!   rsf,
 //!   &public_key,
 //! ).unwrap();
-//! ExampleClient::construct_message(mgf, &example_aux, threshold).unwrap();
+//! client::construct_message(mgf, &example_aux, threshold).unwrap();
 //! ```
 //!
 //! ### Server
@@ -72,11 +70,6 @@
 //! # use nested_sta_rs::format::*;
 //! #
 //! # let public_key = None;
-//! struct ExampleClient {}
-//! impl Client<RandomnessFetcher> for ExampleClient {}
-//! struct ExampleServer {}
-//! impl Server for ExampleServer {}
-//!
 //! let threshold = 10;
 //! let epoch = 0u8;
 //!
@@ -84,13 +77,13 @@
 //! let measurements_1 = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
 //! let client_messages_to_reveal: Vec<Vec<u8>> = (0..threshold).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
-//!   let rsf = ExampleClient::format_measurement(&measurements_1, epoch).unwrap();
-//!   let mgf = ExampleClient::sample_randomness(
-//!     "https://randomness.server",
+//!   let rsf = client::format_measurement(&measurements_1, epoch).unwrap();
+//!   let mgf = client::sample_randomness(
+//!     &RandomnessFetcher::new(),
 //!     rsf,
 //!     &public_key
 //!   ).unwrap();
-//!   ExampleClient::construct_message(
+//!   client::construct_message(
 //!     mgf,
 //!     &example_aux,
 //!     threshold,
@@ -101,13 +94,13 @@
 //! let measurements_2 = vec!["something".as_bytes().to_vec(), "else".as_bytes().to_vec()];
 //! let client_messages_to_hide: Vec<Vec<u8>> = (0..2).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
-//!   let rsf = ExampleClient::format_measurement(&measurements_2, epoch).unwrap();
-//!   let mgf = ExampleClient::sample_randomness(
-//!     "https://randomness.server",
+//!   let rsf = client::format_measurement(&measurements_2, epoch).unwrap();
+//!   let mgf = client::sample_randomness(
+//!     &RandomnessFetcher::new(),
 //!     rsf,
 //!     &public_key
 //!   ).unwrap();
-//!   ExampleClient::construct_message(
+//!   client::construct_message(
 //!     mgf,
 //!     &example_aux,
 //!     threshold,
@@ -116,7 +109,7 @@
 //!
 //! // aggregation reveals the client measurement that reaches the
 //! // threshold, the other measurement stays hidden
-//! let agg_res = ExampleServer::aggregate(
+//! let agg_res = server::aggregate(
 //!   &[client_messages_to_reveal, client_messages_to_hide].concat(),
 //!   threshold,
 //!   epoch,
@@ -147,11 +140,6 @@
 //! # use nested_sta_rs::format::*;
 //! #
 //! # let public_key = None;
-//! struct ExampleClient {}
-//! impl Client<RandomnessFetcher> for ExampleClient {}
-//! struct ExampleServer {}
-//! impl Server for ExampleServer {}
-//!
 //! let threshold = 10;
 //! let epoch = 0u8;
 //!
@@ -159,13 +147,13 @@
 //! let measurements_1 = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
 //! let client_messages_1: Vec<Vec<u8>> = (0..5).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
-//!   let rsf = ExampleClient::format_measurement(&measurements_1, epoch).unwrap();
-//!   let mgf = ExampleClient::sample_randomness(
-//!     "https://randomness.server",
+//!   let rsf = client::format_measurement(&measurements_1, epoch).unwrap();
+//!   let mgf = client::sample_randomness(
+//!     &RandomnessFetcher::new(),
 //!     rsf,
 //!     &public_key
 //!   ).unwrap();
-//!   ExampleClient::construct_message(
+//!   client::construct_message(
 //!     mgf,
 //!     &example_aux,
 //!     threshold
@@ -176,13 +164,13 @@
 //! let measurements_2 = vec!["hello".as_bytes().to_vec(), "goodbye".as_bytes().to_vec()];
 //! let client_messages_2: Vec<Vec<u8>> = (0..5).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
-//!   let rsf = ExampleClient::format_measurement(&measurements_2, epoch).unwrap();
-//!   let mgf = ExampleClient::sample_randomness(
-//!     "https://randomness.server",
+//!   let rsf = client::format_measurement(&measurements_2, epoch).unwrap();
+//!   let mgf = client::sample_randomness(
+//!     &RandomnessFetcher::new(),
 //!     rsf,
 //!     &public_key
 //!   ).unwrap();
-//!   ExampleClient::construct_message(
+//!   client::construct_message(
 //!     mgf,
 //!     &example_aux,
 //!     threshold
@@ -191,7 +179,7 @@
 //!
 //! // aggregation reveals the partial client measurement `vec!["hello"]`,
 //! // but the full measurements stay hidden
-//! let agg_res = ExampleServer::aggregate(
+//! let agg_res = server::aggregate(
 //!   &[client_messages_1, client_messages_2].concat(),
 //!   threshold,
 //!   epoch,

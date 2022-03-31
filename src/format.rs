@@ -25,8 +25,8 @@ impl RandomnessSampling {
     }
   }
 
-  pub fn input(&self) -> Vec<Vec<u8>> {
-    self.input.clone()
+  pub fn input(&self) -> &[Vec<u8>] {
+    &self.input
   }
 
   pub fn epoch(&self) -> u8 {

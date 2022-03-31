@@ -28,7 +28,7 @@ pub struct Response {
 pub struct RequestState {
   rsf: RandomnessSampling,
   req: Request,
-  blinds: Vec<[u8; 32]>,
+  blinds: Vec<ppoprf::CurveScalar>,
 }
 impl RequestState {
   pub fn new(rsf: RandomnessSampling) -> Self {
@@ -36,7 +36,7 @@ impl RequestState {
     let epoch = rsf.epoch();
     let mut blinded_points = Vec::with_capacity(measurements.len());
     let mut blinds = Vec::with_capacity(measurements.len());
-    for x in &measurements {
+    for x in measurements {
       let (p, r) = ppoprf::Client::blind(x);
       blinded_points.push(p);
       blinds.push(r);
@@ -62,7 +62,6 @@ impl RequestState {
     let mut rand_out = Vec::with_capacity(results.len());
     for (i, result) in results.iter().enumerate() {
       let blinded_point = &self.blinded_points()[i];
-      let blind = self.blind(i);
 
       // if a server public key was specified, attempt to verify
       // the result of the randomness
@@ -75,9 +74,9 @@ impl RequestState {
       }
 
       // unblind and finalize randomness output
-      let unblinded = ppoprf::Client::unblind(&result.output, blind);
+      let unblinded = ppoprf::Client::unblind(&result.output, &self.blinds[i]);
       ppoprf::Client::finalize(
-        &self.measurement(i),
+        self.measurement(i),
         self.epoch(),
         &unblinded,
         &mut buf,
@@ -87,20 +86,16 @@ impl RequestState {
     Ok(rand_out)
   }
 
-  pub fn request(&self) -> Request {
-    self.req.clone()
+  pub fn request(&self) -> &Request {
+    &self.req
   }
 
-  fn blinded_points(&self) -> Vec<ppoprf::Point> {
-    self.req.points.clone()
+  fn blinded_points(&self) -> &[ppoprf::Point] {
+    &self.req.points
   }
 
-  fn measurement(&self, idx: usize) -> Vec<u8> {
-    self.rsf.input()[idx].clone()
-  }
-
-  fn blind(&self, idx: usize) -> [u8; 32] {
-    self.blinds[idx]
+  fn measurement(&self, idx: usize) -> &[u8] {
+    &self.rsf.input()[idx]
   }
 
   fn epoch(&self) -> u8 {
@@ -111,10 +106,6 @@ impl RequestState {
 /// The `Fetcher` trait defines the fetching interface for sampling
 /// consistent randomness for clients
 pub trait Fetcher {
-  /// We choose to instantiate the fetcher first with the relevant URL . This is essentially to help with
-  /// mocking the `fetch` during testing.
-  fn new(url: &str) -> Self;
-
   /// The `fetch` function uses the constructed randomness request to sample randomness from the server found at the specified URL.
   fn fetch(
     &self,
@@ -122,17 +113,13 @@ pub trait Fetcher {
   ) -> Result<Vec<ppoprf::Evaluation>, NestedSTARError>;
 }
 
-/// The `PPOPRFFetcher` provides a default implementation of the
+/// The `HTTPFetcher` provides a default implementation of the
 /// randomness fetcher trait, using reqwest for launching queries to a
 /// randomness server that runs a PPOPRF protocol.
-pub struct PPOPRFFetcher {
+pub struct HTTPFetcher {
   url: String,
 }
-impl Fetcher for PPOPRFFetcher {
-  fn new(url: &str) -> Self {
-    Self { url: url.into() }
-  }
-
+impl Fetcher for HTTPFetcher {
   fn fetch(
     &self,
     req: &Request,
@@ -145,7 +132,7 @@ impl Fetcher for PPOPRFFetcher {
       .map_err(|e| NestedSTARError::RandomnessSamplingError(e.to_string()))?;
     // check status okay
     let status = resp.status();
-    if status != 200 {
+    if !status.is_success() {
       return Err(NestedSTARError::RandomnessSamplingError(format!(
         "Server returned bad status code: {}",
         status
@@ -175,6 +162,11 @@ impl Fetcher for PPOPRFFetcher {
     }
   }
 }
+impl HTTPFetcher {
+  pub fn new(url: &str) -> Self {
+    Self { url: url.into() }
+  }
+}
 
 pub mod testing {
   //! This module provides a mock `LocalFetcher` for locally fetching
@@ -196,17 +188,9 @@ pub mod testing {
   ///
   /// NOT TO BE USED IN PRODUCTION
   pub struct LocalFetcher {
-    _url: String,
     pub ppoprf_server: PPOPRFServer,
   }
   impl Fetcher for LocalFetcher {
-    fn new(_url: &str) -> Self {
-      Self {
-        _url: _url.into(),
-        ppoprf_server: PPOPRF_SERVER.clone(),
-      }
-    }
-
     fn fetch(
       &self,
       req: &Request,
@@ -216,6 +200,12 @@ pub mod testing {
     }
   }
   impl LocalFetcher {
+    pub fn new() -> Self {
+      Self {
+        ppoprf_server: PPOPRF_SERVER.clone(),
+      }
+    }
+
     pub fn eval(&self, req: &Request) -> Result<Response, NestedSTARError> {
       // Create a mock response based on expected PPOPRF functionality
       let mut evaluations = Vec::new();
@@ -230,6 +220,11 @@ pub mod testing {
         name: RESPONSE_LABEL.into(),
         results: evaluations,
       })
+    }
+  }
+  impl Default for LocalFetcher {
+    fn default() -> Self {
+      LocalFetcher::new()
     }
   }
 }
@@ -267,17 +262,17 @@ mod tests {
     let state_2 = RequestState::new(RandomnessSampling::new(&nm, epoch));
 
     // set up the ppoprf fetching instance that we are mocking
-    let mut pf = PPOPRFFetcher::new(url_1);
+    let mut pf = HTTPFetcher::new(url_1);
 
     // set up a dummy fetching using the local fetcher instance to simulate local evaluation of the PPOPRF for checking results
-    let lf = LocalFetcher::new("");
+    let lf = LocalFetcher::new();
 
     // mock_1 response for first evaluation
     let mock_1 = http_server.mock(|when, then| {
       when.method(POST).path(endpoint_1);
       then
         .status(200)
-        .header("content-type", "text/html")
+        .header("content-type", "application/json")
         .json_body(json!(lf.eval(&state_1.req).unwrap()));
     });
     let results_1 = pf.fetch(&state_1.req).unwrap();
@@ -291,7 +286,7 @@ mod tests {
       when.method(POST).path(endpoint_2);
       then
         .status(200)
-        .header("content-type", "text/html")
+        .header("content-type", "application/json")
         .json_body(json!(lf.eval(&state_2.req).unwrap()));
     });
     // switch endpoint for new mock

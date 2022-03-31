@@ -1,28 +1,25 @@
-// The `api` module holds the client and server functions for producing
+// The `api` module consists of the client- and server-specific functions for producing
 // messages and aggregating them, respectively.
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
 
-use crate::errors::NestedSTARError;
-use crate::format::*;
-use crate::internal::NestedMeasurement;
 pub use crate::internal::{key_recover, recover};
-use crate::internal::{recover_partial_measurements, sample_layer_enc_keys};
 pub use crate::internal::{NestedMessage, SerializableNestedMessage};
-use crate::randomness;
-use ppoprf::ppoprf;
 
-/// The `Client` trait wraps all API functions used by clients for
-/// constructing their aggregation messages relative to the
-/// NestedSTAR aggregation protocol.
-///
-/// The default implementations of each of the functions can be used
-/// for running an example Client. Each of these functions can be
-/// swapped out for alternative implementations.
-pub trait Client<RF>
-where
-  RF: randomness::Fetcher,
-{
+pub mod client {
+  //! The client module wraps all API functions used by clients for
+  //! constructing their aggregation messages relative to the
+  //! NestedSTAR aggregation protocol.
+  //!
+  //! The default implementations of each of the functions can be used
+  //! for running an example Client. Each of these functions can be
+  //! swapped out for alternative implementations.
+  use crate::errors::NestedSTARError;
+  use crate::format::*;
+  use crate::internal::sample_layer_enc_keys;
+  use crate::internal::NestedMeasurement;
+  use crate::internal::{NestedMessage, SerializableNestedMessage};
+  use crate::randomness;
+  use ppoprf::ppoprf;
+
   /// The function `format_measurement` takes a vector of measurement
   /// values (serialized as bytes), and an agreed threshold and epoch.
   /// Ultimately, the client constructs a nested measurement that is
@@ -30,7 +27,7 @@ where
   ///
   /// The output of the function is a serializable object that can be
   /// passed as input to `randomness_sampling()`.
-  fn format_measurement(
+  pub fn format_measurement(
     measurement: &[Vec<u8>],
     epoch: u8,
   ) -> Result<RandomnessSampling, NestedSTARError> {
@@ -41,13 +38,12 @@ where
   /// In `sample_randomness`, the client uses the output of
   /// `format_measurement()` to retrieve randomness for each layer of
   /// their nested measurement. The randomness is retrieved via
-  /// interaction with a specific randomness server, that is
-  /// contactable at the URL `_rs_url`.
+  /// a randomness fetcher instance, in coordination with a randomness server.
   ///
   /// The output of the function can be passed as an input to
   /// `construct_message()`.
-  fn sample_randomness(
-    url: &str,
+  pub fn sample_randomness(
+    fetcher: &impl randomness::Fetcher,
     rsf: RandomnessSampling,
     verification_key: &Option<ppoprf::ServerPublicKey>,
   ) -> Result<MessageGeneration, NestedSTARError> {
@@ -55,8 +51,7 @@ where
     let state = randomness::RequestState::new(rsf.clone());
 
     // fetch randomness
-    let fetcher = RF::new(url);
-    let results = fetcher.fetch(&state.request())?;
+    let results = fetcher.fetch(state.request())?;
     let finalized = state.finalize_response(&results, verification_key)?;
 
     // output in client aggregation message generation format
@@ -70,7 +65,7 @@ where
   ///
   /// The client can optionally specify any amount of additional data
   /// to be included with their message in `aux`.
-  fn construct_message(
+  pub fn construct_message(
     mgf: MessageGeneration,
     aux_bytes: &[u8],
     threshold: u32,
@@ -91,9 +86,15 @@ where
   }
 }
 
-/// The `Server` trait wraps all public API functions used by the
-/// aggregation server
-pub trait Server {
+pub mod server {
+  //! The server module wraps all public API functions used by the
+  //! aggregation server
+  use crate::format::*;
+  use crate::internal::recover_partial_measurements;
+  use crate::internal::{NestedMessage, SerializableNestedMessage};
+  use std::collections::hash_map::Entry;
+  use std::collections::HashMap;
+
   /// The `aggregate` function is a public API function that takes
   /// a list of serialized Nested STAR messages as input (along
   /// with standard STAR parameters) and outputs a JSON-formatted
@@ -103,7 +104,7 @@ pub trait Server {
   /// The output measurements include the number of occurrences
   /// that were recorded, along with attached auxiliary data
   /// submitted by each contributing client.
-  fn aggregate(
+  pub fn aggregate(
     snms_serialized: &[Vec<u8>],
     threshold: u32,
     epoch: u8,
@@ -152,11 +153,6 @@ mod tests {
   use crate::randomness::testing::{LocalFetcher, PPOPRF_SERVER};
   use serde_json::Value;
 
-  struct TestClient {}
-  impl Client<LocalFetcher> for TestClient {}
-  struct TestServer {}
-  impl Server for TestServer {}
-
   #[test]
   fn basic_test() {
     let epoch = 0;
@@ -164,16 +160,16 @@ mod tests {
     let measurement =
       vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
     let aux = "added_data".as_bytes().to_vec();
-    let rsf = TestClient::format_measurement(&measurement, epoch).unwrap();
-    let mgf = TestClient::sample_randomness(
-      "https://randomness.server",
+    let rsf = client::format_measurement(&measurement, epoch).unwrap();
+    let mgf = client::sample_randomness(
+      &LocalFetcher::new(),
       rsf,
       &Some(PPOPRF_SERVER.get_public_key()),
     )
     .unwrap();
-    let msg = TestClient::construct_message(mgf, &aux, threshold).unwrap();
+    let msg = client::construct_message(mgf, &aux, threshold).unwrap();
     let agg_res =
-      TestServer::aggregate(&[msg.as_bytes().to_vec()], threshold, epoch, 2);
+      server::aggregate(&[msg.as_bytes().to_vec()], threshold, epoch, 2);
     let outputs = agg_res.outputs();
     assert_eq!(outputs.len(), 1);
     assert_eq!(outputs[0].value(), vec!["world"]);
@@ -189,15 +185,15 @@ mod tests {
     let threshold = 1;
     let measurement =
       vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
-    let rsf = TestClient::format_measurement(&measurement, c_epoch).unwrap();
-    let mgf = TestClient::sample_randomness(
-      "https://randomness.server",
+    let rsf = client::format_measurement(&measurement, c_epoch).unwrap();
+    let mgf = client::sample_randomness(
+      &LocalFetcher::new(),
       rsf,
       &Some(PPOPRF_SERVER.get_public_key()),
     )
     .unwrap();
-    let msg = TestClient::construct_message(mgf, &[], threshold).unwrap();
-    TestServer::aggregate(&[msg.as_bytes().to_vec()], threshold, 1u8, 2);
+    let msg = client::construct_message(mgf, &[], threshold).unwrap();
+    server::aggregate(&[msg.as_bytes().to_vec()], threshold, 1u8, 2);
   }
 
   #[test]
@@ -209,20 +205,20 @@ mod tests {
     let messages: Vec<Vec<u8>> = (0..threshold - 1)
       .into_iter()
       .map(|_| {
-        let rsf = TestClient::format_measurement(&measurement, epoch).unwrap();
-        let mgf = TestClient::sample_randomness(
-          "https://randomness.server",
+        let rsf = client::format_measurement(&measurement, epoch).unwrap();
+        let mgf = client::sample_randomness(
+          &LocalFetcher::new(),
           rsf,
           &Some(PPOPRF_SERVER.get_public_key()),
         )
         .unwrap();
-        TestClient::construct_message(mgf, &[], threshold)
+        client::construct_message(mgf, &[], threshold)
           .unwrap()
           .as_bytes()
           .to_vec()
       })
       .collect();
-    let agg_res = TestServer::aggregate(&messages, threshold - 1, epoch, 2);
+    let agg_res = server::aggregate(&messages, threshold - 1, epoch, 2);
     assert_eq!(agg_res.num_recovery_errors(), 2);
     assert_eq!(agg_res.outputs().len(), 0);
   }
@@ -314,14 +310,14 @@ mod tests {
     let mut client_messages: Vec<String> = measurements
       .iter()
       .map(|m| {
-        let rsf = TestClient::format_measurement(m, epoch).unwrap();
-        let mgf = TestClient::sample_randomness(
-          "https://randomness.server",
+        let rsf = client::format_measurement(m, epoch).unwrap();
+        let mgf = client::sample_randomness(
+          &LocalFetcher::new(),
           rsf,
           &Some(PPOPRF_SERVER.get_public_key()),
         )
         .unwrap();
-        TestClient::construct_message(mgf, &aux, threshold).unwrap()
+        client::construct_message(mgf, &aux, threshold).unwrap()
       })
       .collect();
 
@@ -329,7 +325,7 @@ mod tests {
       // Include a single message threshold times. This will cause
       // the server to think that a value should be revealed, but
       // because the shares are identical a failure should occur.
-      let rsf = TestClient::format_measurement(
+      let rsf = client::format_measurement(
         &[
           "some".as_bytes().to_vec(),
           "bad".as_bytes().to_vec(),
@@ -338,13 +334,13 @@ mod tests {
         epoch,
       )
       .unwrap();
-      let mgf = TestClient::sample_randomness(
-        "https://randomness.server",
+      let mgf = client::sample_randomness(
+        &LocalFetcher::new(),
         rsf,
         &Some(PPOPRF_SERVER.get_public_key()),
       )
       .unwrap();
-      let msg = TestClient::construct_message(mgf, &aux, threshold).unwrap();
+      let msg = client::construct_message(mgf, &aux, threshold).unwrap();
       for _ in 0..threshold {
         client_messages.push(msg.clone());
       }
@@ -358,8 +354,7 @@ mod tests {
       .iter()
       .map(|s| s.as_bytes().to_vec())
       .collect();
-    let agg_res =
-      TestServer::aggregate(&serialized, threshold, epoch, num_layers);
+    let agg_res = server::aggregate(&serialized, threshold, epoch, num_layers);
 
     // check outputs
     let outputs = agg_res.outputs();
