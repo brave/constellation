@@ -1,6 +1,5 @@
 // The `api` module consists of the client- and server-specific functions for producing
 // messages and aggregating them, respectively.
-
 pub use crate::internal::{key_recover, recover};
 pub use crate::internal::{NestedMessage, SerializableNestedMessage};
 
