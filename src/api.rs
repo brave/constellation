@@ -7,8 +7,9 @@ use crate::consts::*;
 use crate::errors::NestedSTARError;
 use crate::format::*;
 use crate::internal::NestedMeasurement;
+pub use crate::internal::{key_recover, recover};
 use crate::internal::{recover_partial_measurements, sample_layer_enc_keys};
-use crate::internal::{NestedMessage, SerializableNestedMessage};
+pub use crate::internal::{NestedMessage, SerializableNestedMessage};
 
 /// The `Client` trait wraps all API functions used by clients for
 /// constructing their aggregation messages relative to the
@@ -51,9 +52,12 @@ pub trait Client {
     if cfg!(test) {
       // SHOULD ONLY BE USED FOR TESTING
       let nm: NestedMeasurement = rsf.into();
-      for m in nm.0.iter() {
+      for i in 0..nm.0.len() {
+        let cm = nm.0[0..i + 1]
+          .iter()
+          .fold(Vec::new() as Vec<u8>, |acc, r| [acc, r.as_vec()].concat());
         sta_rs::strobe_digest(
-          m.as_slice(),
+          &cm,
           &[rsf.epoch().as_bytes()],
           "star_sample_local",
           &mut rnd_buf,
@@ -90,8 +94,8 @@ pub trait Client {
       &keys,
       aux_bytes,
     )?);
-    if let Ok(s) = serde_json::to_string(&snm) {
-      return Ok(s);
+    if let Ok(s) = bincode::serialize(&snm) {
+      return Ok(base64::encode(s));
     }
     Err(NestedSTARError::SerdeJSONError)
   }
@@ -119,13 +123,15 @@ pub trait Server {
     let mut recovery_errors = 0;
     let mut nms = Vec::<NestedMessage>::new();
     for snm_ser in snms_serialized.iter() {
-      let res: Result<SerializableNestedMessage, _> =
-        serde_json::from_slice(snm_ser);
-      if let Ok(x) = res {
-        nms.push(NestedMessage::from(x));
-      } else {
-        serde_errors += 1;
+      if let Ok(snm_ser_dec) = base64::decode(snm_ser) {
+        let res: Result<SerializableNestedMessage, _> =
+          bincode::deserialize(&snm_ser_dec);
+        if let Ok(x) = res {
+          nms.push(NestedMessage::from(x));
+          continue;
+        }
       }
+      serde_errors += 1;
     }
     let res_fms =
       recover_partial_measurements(&nms, epoch, threshold, num_layers);
@@ -174,7 +180,7 @@ mod tests {
       TestServer::aggregate(&[msg.as_bytes().to_vec()], threshold, epoch, 2);
     let outputs = agg_res.outputs();
     assert_eq!(outputs.len(), 1);
-    assert_eq!(outputs[0].value(), vec!["hello", "world"]);
+    assert_eq!(outputs[0].value(), vec!["world"]);
     assert_eq!(outputs[0].auxiliary_data(), vec![aux]);
     assert_eq!(agg_res.num_recovery_errors(), 0);
     assert_eq!(agg_res.num_serde_errors(), 0);
@@ -341,7 +347,7 @@ mod tests {
 
     // check outputs
     let outputs = agg_res.outputs();
-    assert_eq!(outputs.len(), 5);
+    assert_eq!(outputs.len(), 3);
     if incl_failures {
       assert_eq!(agg_res.num_recovery_errors(), threshold as usize);
       assert_eq!(agg_res.num_serde_errors(), 1);
@@ -351,42 +357,19 @@ mod tests {
     }
     for output in outputs.iter() {
       let values: Vec<String> = output.value();
-      let mut correct = false;
       let occurrences = output.occurrences();
-      let mut expected_occurrences = 0usize;
-      if values.len() == 3 {
-        if values[0] == "hello"
-          && values[1] == "hello"
-          && values[2] == "germany"
-        {
-          expected_occurrences = (threshold + 5) as usize;
-          correct = true;
-        } else if values[0] == "hello"
-          && values[1] == "dog"
-          && values[2] == "germany"
-        {
-          expected_occurrences = (threshold + 2) as usize;
-          correct = true;
-        }
-      } else if values.len() == 2 {
-        if values[0] == "hello" && values[1] == "hello" {
-          expected_occurrences = (2 * threshold - 15) as usize;
-          correct = true;
-        }
-      } else if values.len() == 1 && values[0] == "hello" {
-        expected_occurrences = (2 * threshold - 3) as usize;
-        correct = true;
-      } else if values.is_empty() {
-        expected_occurrences = (threshold - 1) as usize;
-        correct = true
+      let mut expected_occurrences = None;
+      if values.is_empty() {
+        expected_occurrences = Some((threshold - 1) as usize);
       }
-      if !correct {
-        panic!("OUTPUT ERROR: {:?}", output)
+      if let Some(expected_occurrences) = expected_occurrences {
+        assert_eq!(occurrences, expected_occurrences);
       }
-      assert_eq!(occurrences, expected_occurrences);
 
       if include_aux && !values.is_empty() {
-        assert_eq!(output.auxiliary_data().len(), expected_occurrences);
+        if let Some(expected_occurrences) = expected_occurrences {
+          assert_eq!(output.auxiliary_data().len(), expected_occurrences);
+        }
         // all aux is the same for now
         let decoded = output.auxiliary_data()[0].clone();
         let object: Value = serde_json::from_slice(&decoded).unwrap();
