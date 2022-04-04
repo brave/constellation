@@ -9,28 +9,28 @@ use sta_rs::SingleMeasurement;
 
 // Serialized format that includes the result of `NestedMeasurement` and
 // is compatible with randomness server interactions
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct RandomnessSampling {
   input: Vec<Vec<u8>>,
-  epoch: String,
+  epoch: u8,
 }
 impl RandomnessSampling {
-  pub fn new(nm: &NestedMeasurement, epoch: &str) -> Self {
+  pub fn new(nm: &NestedMeasurement, epoch: u8) -> Self {
     Self {
       input: (0..nm.len())
         .into_iter()
         .map(|i| nm.get_layer_as_bytes(i))
         .collect(),
-      epoch: String::from(epoch),
+      epoch,
     }
   }
 
-  pub fn input(&self) -> Vec<Vec<u8>> {
-    self.input.clone()
+  pub fn input(&self) -> &[Vec<u8>] {
+    &self.input
   }
 
-  pub fn epoch(&self) -> &str {
-    &self.epoch
+  pub fn epoch(&self) -> u8 {
+    self.epoch
   }
 
   pub fn input_len(&self) -> usize {
@@ -51,27 +51,27 @@ impl From<&RandomnessSampling> for NestedMeasurement {
 
 // Serialized format of `NestedMeasurement` that is compatible with
 // randomness server interactions
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct MessageGeneration {
   input: Vec<Vec<u8>>,
   rand: Vec<[u8; RANDOMNESS_LEN]>,
-  epoch: String,
+  epoch: u8,
 }
 impl MessageGeneration {
   pub fn new(
-    rsm: &RandomnessSampling,
+    rsf: RandomnessSampling,
     input_rand: Vec<[u8; RANDOMNESS_LEN]>,
   ) -> Result<Self, NestedSTARError> {
-    if rsm.input_len() != input_rand.len() {
+    if rsf.input_len() != input_rand.len() {
       return Err(NestedSTARError::NumMeasurementLayersError(
-        rsm.input_len(),
+        rsf.input_len(),
         input_rand.len(),
       ));
     }
     Ok(Self {
-      input: rsm.input.clone(),
+      input: rsf.input.clone(),
       rand: input_rand,
-      epoch: String::from(rsm.epoch()),
+      epoch: rsf.epoch(),
     })
   }
 
@@ -79,16 +79,16 @@ impl MessageGeneration {
     self.rand.clone()
   }
 
-  pub fn epoch(&self) -> &str {
-    &self.epoch
+  pub fn epoch(&self) -> u8 {
+    self.epoch
   }
 
   pub fn input_len(&self) -> usize {
     self.input.len()
   }
 }
-impl From<&MessageGeneration> for NestedMeasurement {
-  fn from(rsm: &MessageGeneration) -> NestedMeasurement {
+impl From<MessageGeneration> for NestedMeasurement {
+  fn from(rsm: MessageGeneration) -> NestedMeasurement {
     NestedMeasurement(
       rsm
         .input

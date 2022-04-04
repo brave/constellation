@@ -25,33 +25,27 @@
 //!
 //! ```
 //! # use nested_sta_rs::api::*;
+//! # use nested_sta_rs::randomness::*;
+//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
 //! # use nested_sta_rs::consts::*;
 //! # use nested_sta_rs::errors::*;
 //! # use nested_sta_rs::format::*;
 //! #
-//! # struct ExampleClient {}
-//! # impl Client for ExampleClient {
-//! #   // DO NOT USE THIS FUNCTION IN REAL LIFE
-//! #   fn sample_randomness(rsf: &RandomnessSampling, _rs_url: &str) -> Result<MessageGeneration, NestedSTARError> {
-//! #     let mut rand_bytes: Vec<[u8; RANDOMNESS_LEN]> = Vec::with_capacity(rsf.input_len());
-//! #     for i in 0..rsf.input_len() {
-//! #         // NEVER DO THIS
-//! #         let input = rsf.input()[i].clone();
-//! #         let mut rnd_buf = [0u8; RANDOMNESS_LEN];
-//! #         rnd_buf.copy_from_slice(&input[input.len()-32..]);
-//! #         rand_bytes.push(rnd_buf.clone());
-//! #     }
-//! #     MessageGeneration::new(&rsf, rand_bytes)
-//! #   }
-//! # }
+//! # let public_key = None;
 //! let threshold = 10;
-//! let epoch = "a";
+//! let epoch = 0u8;
+//!
+//! // setup randomness server information
 //! let example_aux = vec![1u8; 3];
 //!
 //! let measurements = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
-//! let rsf = ExampleClient::format_measurement(&measurements, epoch).unwrap();
-//! let mgf = ExampleClient::sample_randomness(&rsf, "https://randomness.server").unwrap();
-//! ExampleClient::construct_message(&mgf, &example_aux, threshold).unwrap();
+//! let rsf = client::format_measurement(&measurements, epoch).unwrap();
+//! let mgf = client::sample_randomness(
+//!   &RandomnessFetcher::new(),
+//!   rsf,
+//!   &public_key,
+//! ).unwrap();
+//! client::construct_message(mgf, &example_aux, threshold).unwrap();
 //! ```
 //!
 //! ### Server
@@ -69,39 +63,28 @@
 //!
 //! ```
 //! # use nested_sta_rs::api::*;
+//! # use nested_sta_rs::randomness::*;
+//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
 //! # use nested_sta_rs::consts::*;
 //! # use nested_sta_rs::errors::*;
 //! # use nested_sta_rs::format::*;
 //! #
-//! # struct ExampleClient {}
-//! # impl Client for ExampleClient {
-//! #   // DO NOT USE THIS FUNCTION IN REAL LIFE
-//! #   fn sample_randomness(rsf: &RandomnessSampling, _rs_url: &str) -> Result<MessageGeneration, NestedSTARError> {
-//! #     let mut rand_bytes: Vec<[u8; RANDOMNESS_LEN]> = Vec::with_capacity(rsf.input_len());
-//! #     for i in 0..rsf.input_len() {
-//! #         // NEVER DO THIS
-//! #         let input = rsf.input()[i].clone();
-//! #         let mut rnd_buf = [0u8; RANDOMNESS_LEN];
-//! #         rnd_buf.copy_from_slice(&input[input.len()-32..]);
-//! #         rand_bytes.push(rnd_buf.clone());
-//! #     }
-//! #     MessageGeneration::new(&rsf, rand_bytes)
-//! #   }
-//! # }
-//! # struct ExampleServer {}
-//! # impl Server for ExampleServer {}
-//!
+//! # let public_key = None;
 //! let threshold = 10;
-//! let epoch = "a";
+//! let epoch = 0u8;
 //!
 //! // construct at least `threshold` client messages with the same measurement
 //! let measurements_1 = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
 //! let client_messages_to_reveal: Vec<Vec<u8>> = (0..threshold).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
-//!   let rsf = ExampleClient::format_measurement(&measurements_1, epoch).unwrap();
-//!   let mgf = ExampleClient::sample_randomness(&rsf, "https://randomness.server").unwrap();
-//!   ExampleClient::construct_message(
-//!     &mgf,
+//!   let rsf = client::format_measurement(&measurements_1, epoch).unwrap();
+//!   let mgf = client::sample_randomness(
+//!     &RandomnessFetcher::new(),
+//!     rsf,
+//!     &public_key
+//!   ).unwrap();
+//!   client::construct_message(
+//!     mgf,
 //!     &example_aux,
 //!     threshold,
 //!   ).unwrap().as_bytes().to_vec()
@@ -111,10 +94,14 @@
 //! let measurements_2 = vec!["something".as_bytes().to_vec(), "else".as_bytes().to_vec()];
 //! let client_messages_to_hide: Vec<Vec<u8>> = (0..2).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
-//!   let rsf = ExampleClient::format_measurement(&measurements_2, epoch).unwrap();
-//!   let mgf = ExampleClient::sample_randomness(&rsf, "https://randomness.server").unwrap();
-//!   ExampleClient::construct_message(
-//!     &mgf,
+//!   let rsf = client::format_measurement(&measurements_2, epoch).unwrap();
+//!   let mgf = client::sample_randomness(
+//!     &RandomnessFetcher::new(),
+//!     rsf,
+//!     &public_key
+//!   ).unwrap();
+//!   client::construct_message(
+//!     mgf,
 //!     &example_aux,
 //!     threshold,
 //!   ).unwrap().as_bytes().to_vec()
@@ -122,7 +109,7 @@
 //!
 //! // aggregation reveals the client measurement that reaches the
 //! // threshold, the other measurement stays hidden
-//! let agg_res = ExampleServer::aggregate(
+//! let agg_res = server::aggregate(
 //!   &[client_messages_to_reveal, client_messages_to_hide].concat(),
 //!   threshold,
 //!   epoch,
@@ -146,39 +133,28 @@
 //!
 //! ```
 //! # use nested_sta_rs::api::*;
+//! # use nested_sta_rs::randomness::*;
+//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
 //! # use nested_sta_rs::consts::*;
 //! # use nested_sta_rs::errors::*;
 //! # use nested_sta_rs::format::*;
 //! #
-//! # struct ExampleClient {}
-//! # impl Client for ExampleClient {
-//! #   // DO NOT USE THIS FUNCTION IN REAL LIFE
-//! #   fn sample_randomness(rsf: &RandomnessSampling, _rs_url: &str) -> Result<MessageGeneration, NestedSTARError> {
-//! #     let mut rand_bytes: Vec<[u8; RANDOMNESS_LEN]> = Vec::with_capacity(rsf.input_len());
-//! #     for i in 0..rsf.input_len() {
-//! #         // NEVER DO THIS
-//! #         let input = rsf.input()[i].clone();
-//! #         let mut rnd_buf = [0u8; RANDOMNESS_LEN];
-//! #         rnd_buf.copy_from_slice(&input[input.len()-32..]);
-//! #         rand_bytes.push(rnd_buf.clone());
-//! #     }
-//! #     MessageGeneration::new(&rsf, rand_bytes)
-//! #   }
-//! # }
-//! # struct ExampleServer {}
-//! # impl Server for ExampleServer {}
-//!
+//! # let public_key = None;
 //! let threshold = 10;
-//! let epoch = "a";
+//! let epoch = 0u8;
 //!
 //! // construct a low number client messages with the same measurement
 //! let measurements_1 = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
 //! let client_messages_1: Vec<Vec<u8>> = (0..5).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
-//!   let rsf = ExampleClient::format_measurement(&measurements_1, epoch).unwrap();
-//!   let mgf = ExampleClient::sample_randomness(&rsf, "https://randomness.server").unwrap();
-//!   ExampleClient::construct_message(
-//!     &mgf,
+//!   let rsf = client::format_measurement(&measurements_1, epoch).unwrap();
+//!   let mgf = client::sample_randomness(
+//!     &RandomnessFetcher::new(),
+//!     rsf,
+//!     &public_key
+//!   ).unwrap();
+//!   client::construct_message(
+//!     mgf,
 //!     &example_aux,
 //!     threshold
 //!   ).unwrap().as_bytes().to_vec()
@@ -188,10 +164,14 @@
 //! let measurements_2 = vec!["hello".as_bytes().to_vec(), "goodbye".as_bytes().to_vec()];
 //! let client_messages_2: Vec<Vec<u8>> = (0..5).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
-//!   let rsf = ExampleClient::format_measurement(&measurements_2, epoch).unwrap();
-//!   let mgf = ExampleClient::sample_randomness(&rsf, "https://randomness.server").unwrap();
-//!   ExampleClient::construct_message(
-//!     &mgf,
+//!   let rsf = client::format_measurement(&measurements_2, epoch).unwrap();
+//!   let mgf = client::sample_randomness(
+//!     &RandomnessFetcher::new(),
+//!     rsf,
+//!     &public_key
+//!   ).unwrap();
+//!   client::construct_message(
+//!     mgf,
 //!     &example_aux,
 //!     threshold
 //!   ).unwrap().as_bytes().to_vec()
@@ -199,7 +179,7 @@
 //!
 //! // aggregation reveals the partial client measurement `vec!["hello"]`,
 //! // but the full measurements stay hidden
-//! let agg_res = ExampleServer::aggregate(
+//! let agg_res = server::aggregate(
 //!   &[client_messages_1, client_messages_2].concat(),
 //!   threshold,
 //!   epoch,
@@ -218,6 +198,7 @@ mod internal;
 
 pub mod api;
 pub mod format;
+pub mod randomness;
 
 pub mod consts {
   pub const MAX_MEASUREMENT_LEN: usize = 32;
@@ -235,6 +216,7 @@ pub mod errors {
     LayerEncryptionKeysError(usize, usize),
     NumMeasurementLayersError(usize, usize),
     SerdeJSONError,
+    RandomnessSamplingError(String),
   }
 
   impl std::error::Error for NestedSTARError {}
@@ -248,6 +230,7 @@ pub mod errors {
         NestedSTARError::LayerEncryptionKeysError(nkeys, nlayers) => write!(f, "Number of encryption keys ({}) provided for nested encryptions is not compatible with number of layers specified ({}).", nkeys, nlayers),
         NestedSTARError::NumMeasurementLayersError(current, expected) => write!(f, "Number of inferred measurement layers is {}, but expected is {}.", current, expected),
         NestedSTARError::SerdeJSONError => write!(f, "An error occurred during JSON serialization/deserialization."),
+        NestedSTARError::RandomnessSamplingError(err_string) => write!(f, "An error occurred during the sampling of randomness: {}.", err_string),
       }
     }
   }
