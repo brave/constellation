@@ -24,7 +24,8 @@ pub struct Response {
   results: Vec<ppoprf::Evaluation>,
 }
 
-/// `RequestState` for building and building all state associated with randomness requests
+/// `RequestState` for building and building all state associated with
+/// randomness requests
 pub struct RequestState {
   rsf: RandomnessSampling,
   req: Request,
@@ -63,8 +64,8 @@ impl RequestState {
     for (i, result) in results.iter().enumerate() {
       let blinded_point = &self.blinded_points()[i];
 
-      // if a server public key was specified, attempt to verify
-      // the result of the randomness
+      // if a server public key was specified, attempt to verify the
+      // result of the randomness
       if let Some(pk) = public_key {
         if !ppoprf::Client::verify(pk, blinded_point, result, self.epoch()) {
           return Err(NestedSTARError::RandomnessSamplingError(
@@ -106,7 +107,8 @@ impl RequestState {
 /// The `Fetcher` trait defines the fetching interface for sampling
 /// consistent randomness for clients
 pub trait Fetcher {
-  /// The `fetch` function uses the constructed randomness request to sample randomness from the server found at the specified URL.
+  /// The `fetch` function uses the constructed randomness request to
+  /// sample randomness from the server found at the specified URL.
   fn fetch(
     &self,
     req: &Request,
@@ -183,12 +185,12 @@ pub mod testing {
     pub static ref PPOPRF_SERVER: PPOPRFServer = PPOPRFServer::new((0u8..=7).collect()).unwrap();
   }
 
-  /// The `LocalFetcher` provides a test implementation of the
-  /// fetching interface, using a local instantiation of the PPOPRF.
+  /// The `LocalFetcher` provides a test implementation of the fetching
+  /// interface, using a local instantiation of the PPOPRF.
   ///
   /// NOT TO BE USED IN PRODUCTION
   pub struct LocalFetcher {
-    pub ppoprf_server: PPOPRFServer,
+    ppoprf_server: PPOPRFServer,
   }
   impl Fetcher for LocalFetcher {
     fn fetch(
@@ -221,6 +223,10 @@ pub mod testing {
         results: evaluations,
       })
     }
+
+    pub fn get_server(&self) -> &PPOPRFServer {
+      &self.ppoprf_server
+    }
   }
   impl Default for LocalFetcher {
     fn default() -> Self {
@@ -251,8 +257,8 @@ mod tests {
     // set epoch
     let epoch = 0u8;
 
-    // sample two separate states for the same measurement (simulates two clients
-    // sharing the same measurement)
+    // sample two separate states for the same measurement (simulates
+    // two clients sharing the same measurement)
     let nm = NestedMeasurement::new(&[
       "hello".as_bytes().to_vec(),
       "world".as_bytes().to_vec(),
@@ -264,7 +270,8 @@ mod tests {
     // set up the ppoprf fetching instance that we are mocking
     let mut pf = HTTPFetcher::new(url_1);
 
-    // set up a dummy fetching using the local fetcher instance to simulate local evaluation of the PPOPRF for checking results
+    // set up a dummy fetching using the local fetcher instance to
+    // simulate local evaluation of the PPOPRF for checking results
     let lf = LocalFetcher::new();
 
     // mock_1 response for first evaluation
@@ -277,7 +284,7 @@ mod tests {
     });
     let results_1 = pf.fetch(&state_1.req).unwrap();
     let finalized_1 = state_1
-      .finalize_response(&results_1, &Some(lf.ppoprf_server.get_public_key()))
+      .finalize_response(&results_1, &Some(lf.get_server().get_public_key()))
       .unwrap();
     mock_1.assert();
 
@@ -294,7 +301,7 @@ mod tests {
     // sample randomness
     let results_2 = pf.fetch(&state_2.req).unwrap();
     let finalized_2 = state_2
-      .finalize_response(&results_2, &Some(lf.ppoprf_server.get_public_key()))
+      .finalize_response(&results_2, &Some(lf.get_server().get_public_key()))
       .unwrap();
     mock_2.assert();
 
