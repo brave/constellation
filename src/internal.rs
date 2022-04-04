@@ -119,6 +119,7 @@ impl From<Message> for SerializableMessage {
 /// recovery mechanism.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NestedMessage {
+  pub epoch: u8,
   pub unencrypted_layer: Message,
   pub encrypted_layers: Vec<Ciphertext>,
 }
@@ -128,6 +129,7 @@ impl NestedMessage {
     rand_bytes: &[[u8; RANDOMNESS_LEN]],
     keys: &[Vec<u8>],
     aux_data: &[u8],
+    epoch: u8,
   ) -> Result<Self, NestedSTARError> {
     if gens.len() - 1 != keys.len() {
       return Err(NestedSTARError::LayerEncryptionKeysError(
@@ -185,6 +187,7 @@ impl NestedMessage {
       }
     }
     Ok(Self {
+      epoch,
       unencrypted_layer: unencrypted_layer.unwrap(),
       encrypted_layers,
     })
@@ -208,12 +211,14 @@ impl NestedMessage {
 /// Serialization wrapper for the `NestedMessage` struct
 #[derive(Serialize, Deserialize)]
 pub struct SerializableNestedMessage {
+  epoch: u8,
   unencrypted_layer: SerializableMessage,
   encrypted_layers: Vec<Vec<u8>>,
 }
 impl From<SerializableNestedMessage> for NestedMessage {
   fn from(sm: SerializableNestedMessage) -> NestedMessage {
     NestedMessage {
+      epoch: sm.epoch,
       unencrypted_layer: sm.unencrypted_layer.into(),
       encrypted_layers: sm
         .encrypted_layers
@@ -226,6 +231,7 @@ impl From<SerializableNestedMessage> for NestedMessage {
 impl From<&SerializableNestedMessage> for NestedMessage {
   fn from(sm: &SerializableNestedMessage) -> NestedMessage {
     NestedMessage {
+      epoch: sm.epoch,
       unencrypted_layer: sm.unencrypted_layer.clone().into(),
       encrypted_layers: sm
         .encrypted_layers
@@ -238,6 +244,7 @@ impl From<&SerializableNestedMessage> for NestedMessage {
 impl From<NestedMessage> for SerializableNestedMessage {
   fn from(nm: NestedMessage) -> Self {
     Self {
+      epoch: nm.epoch,
       unencrypted_layer: nm.unencrypted_layer.into(),
       encrypted_layers: nm
         .encrypted_layers
@@ -665,7 +672,7 @@ mod tests {
       sample_client_measurement(&[1u8, 2u8, 3u8], 3, threshold, epoch);
     keys.pop();
     let rand = sample_randomness(&mgs);
-    let nmsg = NestedMessage::new(&mgs, &rand, &keys, &[]);
+    let nmsg = NestedMessage::new(&mgs, &rand, &keys, &[], epoch);
     assert!(nmsg.is_err());
     assert_eq!(
       nmsg,
@@ -681,7 +688,7 @@ mod tests {
       sample_client_measurement(&[1u8, 2u8, 3u8], 3, threshold, epoch);
     let mut rand = sample_randomness(&mgs);
     rand.pop();
-    let nmsg = NestedMessage::new(&mgs, &rand, &keys, &[]);
+    let nmsg = NestedMessage::new(&mgs, &rand, &keys, &[], epoch);
     assert!(nmsg.is_err());
     assert_eq!(
       nmsg,
@@ -850,7 +857,7 @@ mod tests {
       }
       let rand = sample_randomness(&mgs);
       let nested_message =
-        NestedMessage::new(&mgs, &rand, &keys, added_data).unwrap();
+        NestedMessage::new(&mgs, &rand, &keys, added_data, epoch).unwrap();
       messages.push(nested_message);
       measurements.push(nested_m);
     }
@@ -927,7 +934,7 @@ mod tests {
     }
     let rand = sample_randomness(&mgs);
     let mut nested_message =
-      NestedMessage::new(&mgs, &rand, &keys, added_data).unwrap();
+      NestedMessage::new(&mgs, &rand, &keys, added_data, epoch).unwrap();
     let checks = vec![
       vec![
         171, 38, 129, 158, 77, 71, 82, 131, 243, 52, 6, 92, 214, 67, 67, 126,
