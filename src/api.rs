@@ -77,6 +77,7 @@ pub mod client {
       &mgf.rand(),
       &keys,
       aux_bytes,
+      mgf.epoch,
     )?);
     if let Ok(s) = bincode::serialize(&snm) {
       return Ok(base64::encode(s));

@@ -55,7 +55,7 @@ impl From<&RandomnessSampling> for NestedMeasurement {
 pub struct MessageGeneration {
   input: Vec<Vec<u8>>,
   rand: Vec<[u8; RANDOMNESS_LEN]>,
-  epoch: u8,
+  pub epoch: u8,
 }
 impl MessageGeneration {
   pub fn new(
