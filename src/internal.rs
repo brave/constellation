@@ -272,8 +272,8 @@ pub struct NestedAssociatedData {
 /// layer, plus the encryption key for decrypting the next layer.
 #[derive(Clone, Debug)]
 pub struct PartialMeasurement {
-  measurement: NestedMeasurement,
-  aux: NestedAssociatedData,
+  pub measurement: NestedMeasurement,
+  pub aux: NestedAssociatedData,
 }
 impl PartialMeasurement {
   pub fn get_next_layer_key(&self) -> &Option<Vec<u8>> {
