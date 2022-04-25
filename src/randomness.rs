@@ -77,7 +77,7 @@ impl RequestState {
       // unblind and finalize randomness output
       let unblinded = ppoprf::Client::unblind(&result.output, &self.blinds[i]);
       ppoprf::Client::finalize(
-        self.measurement(i),
+        &self.measurement(i),
         self.epoch(),
         &unblinded,
         &mut buf,
@@ -95,8 +95,12 @@ impl RequestState {
     &self.req.points
   }
 
-  fn measurement(&self, idx: usize) -> &[u8] {
-    &self.rsf.input()[idx]
+  fn measurement(&self, idx: usize) -> Vec<u8> {
+    let mut result = Vec::new();
+    for m in &self.rsf.input()[..(idx + 1)] {
+      result.extend(m);
+    }
+    result
   }
 
   fn epoch(&self) -> u8 {
