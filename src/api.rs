@@ -131,6 +131,10 @@ pub mod server {
     let mut output_map = HashMap::new();
     for res in res_fms {
       if let Ok(prm) = res {
+        // ignore empty recoveries in output
+        if prm.is_empty() {
+          continue;
+        }
         match output_map.entry(prm.get_measurement_raw()) {
           Entry::Vacant(e) => {
             let om = OutputMeasurement::from(prm);
@@ -360,7 +364,7 @@ mod tests {
 
     // check outputs
     let outputs = agg_res.outputs();
-    assert_eq!(outputs.len(), 3);
+    assert_eq!(outputs.len(), 2);
     if incl_failures {
       assert_eq!(agg_res.num_recovery_errors(), threshold as usize);
       assert_eq!(agg_res.num_serde_errors(), 1);

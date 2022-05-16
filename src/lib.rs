@@ -116,7 +116,7 @@
 //!   measurements_1.len()
 //! );
 //! let output = agg_res.outputs();
-//! assert_eq!(output.len(), 2);
+//! assert_eq!(output.len(), 1);
 //! let revealed_output = output.iter().find(|v| v.value() == vec!["world"]).unwrap();
 //! assert_eq!(revealed_output.value(), vec!["world"]);
 //! assert_eq!(revealed_output.occurrences(), 10);
@@ -201,7 +201,6 @@ pub mod format;
 pub mod randomness;
 
 pub mod consts {
-  pub const MAX_MEASUREMENT_LEN: usize = 32;
   pub const RANDOMNESS_LEN: usize = 32;
 }
 
@@ -210,7 +209,6 @@ pub mod errors {
 
   #[derive(Debug, Clone, PartialEq)]
   pub enum NestedSTARError {
-    LongMeasurementError,
     ShareRecoveryFailedError,
     ClientMeasurementMismatchError(String, String),
     LayerEncryptionKeysError(usize, usize),
@@ -224,7 +222,6 @@ pub mod errors {
   impl fmt::Display for NestedSTARError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
       match self {
-        NestedSTARError::LongMeasurementError => write!(f, "Input measurement contains long entry, maximum length is {}", crate::consts::MAX_MEASUREMENT_LEN),
         NestedSTARError::ShareRecoveryFailedError => write!(f, "Internal share recovery failed"),
         NestedSTARError::ClientMeasurementMismatchError(original, received) => write!(f, "Clients sent differing measurement for identical share sets, original: {}, received: {}", original, received),
         NestedSTARError::LayerEncryptionKeysError(nkeys, nlayers) => write!(f, "Number of encryption keys ({}) provided for nested encryptions is not compatible with number of layers specified ({}).", nkeys, nlayers),
