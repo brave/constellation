@@ -185,7 +185,6 @@ mod tests {
   }
 
   #[test]
-  // #[should_panic(expected = "called `Option::unwrap()` on a `None` value")]
   fn incompatible_epoch() {
     let c_epoch = 0u8;
     let threshold = 1;
