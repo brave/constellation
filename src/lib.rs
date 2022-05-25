@@ -215,6 +215,7 @@ pub mod errors {
     NumMeasurementLayersError(usize, usize),
     SerdeJSONError,
     RandomnessSamplingError(String),
+    MessageParseError,
   }
 
   impl std::error::Error for NestedSTARError {}
@@ -228,6 +229,7 @@ pub mod errors {
         NestedSTARError::NumMeasurementLayersError(current, expected) => write!(f, "Number of inferred measurement layers is {}, but expected is {}.", current, expected),
         NestedSTARError::SerdeJSONError => write!(f, "An error occurred during JSON serialization/deserialization."),
         NestedSTARError::RandomnessSamplingError(err_string) => write!(f, "An error occurred during the sampling of randomness: {}.", err_string),
+        NestedSTARError::MessageParseError => write!(f, "An error when attempting to parse the message."),
       }
     }
   }

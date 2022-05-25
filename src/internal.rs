@@ -509,26 +509,40 @@ pub fn recover(
   let ciphertexts = subset.iter().map(|t| t.ciphertext.clone());
   let plaintexts = ciphertexts.map(|c| c.decrypt(key, "star_encrypt"));
 
-  let splits: Vec<(Vec<u8>, NestedAssociatedData)> = plaintexts
-    .map(|slice| {
-      // parse all measurement bytes
-      let measurement_bytes = load_bytes(&slice).unwrap().to_vec();
+  let splits: Vec<Result<(Vec<u8>, NestedAssociatedData), NestedSTARError>> =
+    plaintexts
+      .map(|slice| {
+        // parse all measurement bytes
+        if let Some(buf) = load_bytes(&slice) {
+          let measurement_bytes = buf.to_vec();
+          // parse remaining bytes of auxiliary data
+          let rem = &slice[4 + measurement_bytes.len() as usize..];
+          if let Some(aux_bytes) = load_bytes(rem) {
+            let aux: NestedAssociatedData =
+              bincode::deserialize(aux_bytes).unwrap();
+            return Ok((measurement_bytes, aux));
+          }
+        }
+        Err(NestedSTARError::MessageParseError)
+      })
+      .collect();
 
-      // parse remaining bytes of auxiliary data
-      let rem = &slice[4 + measurement_bytes.len() as usize..];
-      let aux_bytes = load_bytes(rem).unwrap();
-      let aux: NestedAssociatedData = bincode::deserialize(aux_bytes).unwrap();
-      (measurement_bytes, aux)
-    })
-    .collect();
+  // we also ensure that no message parsing errors occurred, we should
+  // recover with only a threshold number of messages, so any error that
+  // occurs should be fatal for recovery
+  if splits.iter().any(|x| x.is_err()) {
+    return Err(NestedSTARError::MessageParseError);
+  }
 
-  // check that decrypted measurements all have the same value
-  let measurement = &splits[0].0;
-  for new_measurement in splits.iter().skip(1) {
-    if &new_measurement.0 != measurement {
+  // check that decrypted measurements all have the same value.
+  // we can unwrap here because errors should have been caught above
+  let measurement = &splits[0].as_ref().unwrap().0;
+  for to_chk in splits.iter().skip(1) {
+    let measurement_to_chk = &to_chk.as_ref().unwrap().0;
+    if measurement_to_chk != measurement {
       return Err(NestedSTARError::ClientMeasurementMismatchError(
         base64::encode(measurement),
-        base64::encode(&new_measurement.0),
+        base64::encode(&measurement_to_chk),
       ));
     }
   }
@@ -537,7 +551,10 @@ pub fn recover(
   Ok(
     splits
       .into_iter()
-      .map(|(measurement_bytes, aux)| {
+      .map(|res| {
+        // we can unwrap here because errors should have been caught
+        // above
+        let (measurement_bytes, aux) = res.unwrap();
         let y = vec![measurement_bytes];
         let nm = NestedMeasurement::new(&y).unwrap();
         PartialMeasurement {
@@ -611,7 +628,7 @@ mod tests {
     let threshold = 1;
     let epoch = 0u8;
     let (_, mgs, mut keys) =
-      sample_client_measurement(&[1u8, 2u8, 3u8], 3, threshold, epoch);
+      sample_client_measurement(&[1u8, 2u8, 3u8], threshold, epoch);
     keys.pop();
     let rand = sample_randomness(&mgs);
     let nmsg = NestedMessage::new(&mgs, &rand, &keys, &[], epoch);
@@ -627,7 +644,7 @@ mod tests {
     let threshold = 1;
     let epoch = 0u8;
     let (_, mgs, keys) =
-      sample_client_measurement(&[1u8, 2u8, 3u8], 3, threshold, epoch);
+      sample_client_measurement(&[1u8, 2u8, 3u8], threshold, epoch);
     let mut rand = sample_randomness(&mgs);
     rand.pop();
     let nmsg = NestedMessage::new(&mgs, &rand, &keys, &[], epoch);
@@ -787,12 +804,8 @@ mod tests {
     let mut messages: Vec<NestedMessage> = Vec::new();
     let mut measurements = Vec::new();
     for input in inputs.iter().take(num_clients) {
-      let (nested_m, mgs, keys) = sample_client_measurement(
-        input,
-        measurement_len,
-        threshold as u32,
-        epoch,
-      );
+      let (nested_m, mgs, keys) =
+        sample_client_measurement(input, threshold as u32, epoch);
       let mut added_data = &vec![];
       if aux.is_some() {
         added_data = aux.as_ref().unwrap();
@@ -849,13 +862,15 @@ mod tests {
 
   fn sample_client_measurement(
     vals: &[u8],
-    measurement_len: usize,
     threshold: u32,
     epoch: u8,
   ) -> (NestedMeasurement, Vec<MessageGenerator>, Vec<Vec<u8>>) {
     let mut measurement: Vec<Vec<u8>> = Vec::new();
-    for &x in vals.iter().take(measurement_len) {
-      measurement.push(vec![x; 32]);
+    // There is no limit on measurement lengths, we just fix these for
+    // making it possible to establish test vectors
+    let check_lens = [32, 91, 400];
+    for (i, &x) in vals.iter().enumerate() {
+      measurement.push(vec![x; check_lens[i % check_lens.len()]]);
     }
     let nm = NestedMeasurement::new(&measurement).unwrap();
     let mgs = nm.get_message_generators(threshold, epoch);
@@ -867,7 +882,7 @@ mod tests {
     let threshold = 1;
     let epoch = 0u8;
     let (nm, mgs, keys) =
-      sample_client_measurement(&[1u8, 2u8, 3u8], 3, threshold, epoch);
+      sample_client_measurement(&[1u8, 2u8, 3u8], threshold, epoch);
 
     // check tags and measurement in each layer
     let mut added_data = &vec![];
@@ -884,14 +899,14 @@ mod tests {
         119,
       ],
       vec![
-        129, 108, 92, 224, 25, 162, 44, 213, 211, 31, 134, 212, 156, 119, 130,
-        46, 209, 216, 171, 70, 143, 75, 110, 77, 196, 200, 176, 20, 135, 114,
-        218, 44,
+        0, 194, 167, 145, 145, 232, 142, 69, 186, 245, 187, 201, 46, 220, 222,
+        58, 71, 157, 253, 5, 198, 73, 244, 146, 64, 194, 149, 20, 228, 217,
+        201, 140,
       ],
       vec![
-        105, 219, 117, 161, 102, 198, 138, 73, 23, 173, 68, 241, 95, 64, 247,
-        158, 201, 69, 253, 121, 216, 163, 75, 38, 33, 196, 46, 186, 77, 53,
-        203, 136,
+        67, 188, 75, 167, 174, 162, 3, 192, 54, 197, 53, 85, 139, 165, 228, 65,
+        221, 98, 95, 103, 27, 244, 179, 115, 130, 210, 247, 22, 143, 113, 171,
+        185,
       ],
     ];
     let aux_ref = aux.as_ref();

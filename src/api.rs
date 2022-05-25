@@ -185,7 +185,7 @@ mod tests {
   }
 
   #[test]
-  #[should_panic(expected = "called `Option::unwrap()` on a `None` value")]
+  // #[should_panic(expected = "called `Option::unwrap()` on a `None` value")]
   fn incompatible_epoch() {
     let c_epoch = 0u8;
     let threshold = 1;
@@ -199,7 +199,10 @@ mod tests {
     )
     .unwrap();
     let msg = client::construct_message(mgf, &[], threshold).unwrap();
-    server::aggregate(&[msg.as_bytes().to_vec()], threshold, 1u8, 2);
+    let agg_res =
+      server::aggregate(&[msg.as_bytes().to_vec()], threshold, 1u8, 2);
+    assert_eq!(agg_res.num_recovery_errors(), 1);
+    assert_eq!(agg_res.outputs().len(), 0);
   }
 
   #[test]
