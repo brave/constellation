@@ -521,7 +521,7 @@ pub fn recover(
             if let Ok(aux) = bincode::deserialize(aux_bytes) {
               return Ok((measurement_bytes, aux));
             } else {
-              return Err(NestedSTARError::SerdeError);
+              return Err(NestedSTARError::BincodeError);
             }
           }
         }
@@ -543,8 +543,8 @@ pub fn recover(
     let measurement_to_chk = &to_chk.as_ref().unwrap().0;
     if measurement_to_chk != measurement {
       return Err(NestedSTARError::ClientMeasurementMismatchError(
-        base64::encode(measurement),
-        base64::encode(&measurement_to_chk),
+        serde_json::to_string(measurement).unwrap(),
+        serde_json::to_string(&measurement_to_chk).unwrap(),
       ));
     }
   }
