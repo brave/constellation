@@ -514,13 +514,15 @@ pub fn recover(
       .map(|slice| {
         // parse all measurement bytes
         if let Some(buf) = load_bytes(&slice) {
-          let measurement_bytes = buf.to_vec();
           // parse remaining bytes of auxiliary data
-          let rem = &slice[4 + measurement_bytes.len() as usize..];
+          let rem = &slice[4 + buf.len()..];
           if let Some(aux_bytes) = load_bytes(rem) {
-            let aux: NestedAssociatedData =
-              bincode::deserialize(aux_bytes).unwrap();
-            return Ok((measurement_bytes, aux));
+            let measurement_bytes = buf.to_vec();
+            if let Ok(aux) = bincode::deserialize(aux_bytes) {
+              return Ok((measurement_bytes, aux));
+            } else {
+              return Err(NestedSTARError::SerdeError);
+            }
           }
         }
         Err(NestedSTARError::MessageParseError)

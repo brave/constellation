@@ -213,7 +213,7 @@ pub mod errors {
     ClientMeasurementMismatchError(String, String),
     LayerEncryptionKeysError(usize, usize),
     NumMeasurementLayersError(usize, usize),
-    SerdeJSONError,
+    SerdeError,
     RandomnessSamplingError(String),
     MessageParseError,
   }
@@ -227,7 +227,7 @@ pub mod errors {
         NestedSTARError::ClientMeasurementMismatchError(original, received) => write!(f, "Clients sent differing measurement for identical share sets, original: {}, received: {}", original, received),
         NestedSTARError::LayerEncryptionKeysError(nkeys, nlayers) => write!(f, "Number of encryption keys ({}) provided for nested encryptions is not compatible with number of layers specified ({}).", nkeys, nlayers),
         NestedSTARError::NumMeasurementLayersError(current, expected) => write!(f, "Number of inferred measurement layers is {}, but expected is {}.", current, expected),
-        NestedSTARError::SerdeJSONError => write!(f, "An error occurred during JSON serialization/deserialization."),
+        NestedSTARError::SerdeError => write!(f, "An error occurred during serialization/deserialization."),
         NestedSTARError::RandomnessSamplingError(err_string) => write!(f, "An error occurred during the sampling of randomness: {}.", err_string),
         NestedSTARError::MessageParseError => write!(f, "An error when attempting to parse the message."),
       }

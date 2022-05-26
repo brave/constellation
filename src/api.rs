@@ -84,7 +84,7 @@ pub mod client {
     if let Ok(s) = bincode::serialize(&snm) {
       return Ok(base64::encode(s));
     }
-    Err(NestedSTARError::SerdeJSONError)
+    Err(NestedSTARError::SerdeError)
   }
 }
 
