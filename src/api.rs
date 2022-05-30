@@ -84,7 +84,7 @@ pub mod client {
     if let Ok(s) = bincode::serialize(&snm) {
       return Ok(base64::encode(s));
     }
-    Err(NestedSTARError::SerdeJSONError)
+    Err(NestedSTARError::SerdeError)
   }
 }
 
@@ -131,6 +131,10 @@ pub mod server {
     let mut output_map = HashMap::new();
     for res in res_fms {
       if let Ok(prm) = res {
+        // ignore empty recoveries in output
+        if prm.is_empty() {
+          continue;
+        }
         match output_map.entry(prm.get_measurement_raw()) {
           Entry::Vacant(e) => {
             let om = OutputMeasurement::from(prm);
@@ -181,7 +185,6 @@ mod tests {
   }
 
   #[test]
-  #[should_panic(expected = "called `Option::unwrap()` on a `None` value")]
   fn incompatible_epoch() {
     let c_epoch = 0u8;
     let threshold = 1;
@@ -195,7 +198,10 @@ mod tests {
     )
     .unwrap();
     let msg = client::construct_message(mgf, &[], threshold).unwrap();
-    server::aggregate(&[msg.as_bytes().to_vec()], threshold, 1u8, 2);
+    let agg_res =
+      server::aggregate(&[msg.as_bytes().to_vec()], threshold, 1u8, 2);
+    assert_eq!(agg_res.num_recovery_errors(), 1);
+    assert_eq!(agg_res.outputs().len(), 0);
   }
 
   #[test]
@@ -360,7 +366,7 @@ mod tests {
 
     // check outputs
     let outputs = agg_res.outputs();
-    assert_eq!(outputs.len(), 3);
+    assert_eq!(outputs.len(), 2);
     if incl_failures {
       assert_eq!(agg_res.num_recovery_errors(), threshold as usize);
       assert_eq!(agg_res.num_serde_errors(), 1);

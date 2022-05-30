@@ -1,6 +1,5 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::convert::TryInto;
 
 use serde::{Deserialize, Serialize};
 use sta_rs::{
@@ -23,26 +22,10 @@ const NESTED_STAR_ENCRYPTION_LABEL: &str = "nested_star_layer_encrypt";
 pub struct NestedMeasurement(pub Vec<SingleMeasurement>);
 impl NestedMeasurement {
   pub fn new(x_list: &[Vec<u8>]) -> Result<Self, NestedSTARError> {
-    if x_list.iter().any(|x| x.len() > MAX_MEASUREMENT_LEN) {
-      return Err(NestedSTARError::LongMeasurementError);
-    }
     let mut measurements = Vec::with_capacity(x_list.len());
-    // pad measurements with zeroes to 32 bytes
-    let mut buf = vec![0u8; MAX_MEASUREMENT_LEN];
-    let padded: Vec<Vec<u8>> = x_list
-      .iter()
-      .map(|x| {
-        let x_len = x.len();
-        buf[..x_len].copy_from_slice(x);
-        if x_len < MAX_MEASUREMENT_LEN {
-          buf[x_len..].copy_from_slice(&vec![0u8; MAX_MEASUREMENT_LEN - x_len]);
-        }
-        buf.clone()
-      })
-      .collect();
     // create partial measurements
-    for x in padded {
-      measurements.push(SingleMeasurement::new(&x));
+    for x in x_list {
+      measurements.push(SingleMeasurement::new(x));
     }
     Ok(Self(measurements))
   }
@@ -71,18 +54,6 @@ impl NestedMeasurement {
 
   pub fn len(&self) -> usize {
     self.0.len()
-  }
-
-  fn get_split_layer(&self, i: usize) -> Vec<[u8; MAX_MEASUREMENT_LEN]> {
-    let concatenated_measurement = self.get_layer_as_bytes(i);
-    let mut output = Vec::new();
-    for j in 0..i + 1 {
-      let value = concatenated_measurement
-        [j * MAX_MEASUREMENT_LEN..(j + 1) * MAX_MEASUREMENT_LEN]
-        .to_vec();
-      output.push(value.try_into().unwrap());
-    }
-    output
   }
 }
 
@@ -291,15 +262,6 @@ pub struct FinalMeasurement {
   data: Vec<u8>,
 }
 impl FinalMeasurement {
-  pub fn measurement_to_vec(&self) -> Vec<Vec<u8>> {
-    let v = self.get_partial_measurement_vector(self.measurement.len() - 1);
-    let mut ov = Vec::new();
-    for x in v {
-      ov.push(x.to_vec());
-    }
-    ov
-  }
-
   pub fn get_measurement_raw(&self) -> Vec<u8> {
     self.get_partial_measurement_raw(self.measurement.len() - 1)
   }
@@ -310,13 +272,6 @@ impl FinalMeasurement {
 
   fn get_partial_measurement_raw(&self, i: usize) -> Vec<u8> {
     self.measurement.get_layer_as_bytes(i)
-  }
-
-  fn get_partial_measurement_vector(
-    &self,
-    i: usize,
-  ) -> Vec<[u8; MAX_MEASUREMENT_LEN]> {
-    self.measurement.get_split_layer(i)
   }
 }
 impl From<&PartialMeasurement> for FinalMeasurement {
@@ -354,11 +309,8 @@ impl PartialRecoveredMessage {
     }
   }
 
-  pub fn measurement_to_vec(&self) -> Vec<Vec<u8>> {
-    match self.measurement.as_ref() {
-      Some(m) => m.measurement_to_vec(),
-      None => Vec::new(),
-    }
+  pub fn is_empty(&self) -> bool {
+    self.measurement.is_none() && self.next_message.is_none()
   }
 }
 
@@ -425,7 +377,7 @@ pub fn recover_partial_measurements(
     .collect()];
 
   // The `measurements` variable will eventually hold the most fine-grained
-  // partial measurement  sent by each client
+  // partial measurement sent by each client
   let mut measurements = vec![Ok(None); ident_nested_messages.len()];
 
   // refers to the layer that is currently being processed
@@ -515,9 +467,18 @@ pub fn recover_partial_measurements(
     .map(|(ident_nested_msg, measurement)| match measurement {
       Err(e) => Err(e),
       Ok(msmt) => {
+        // The measurement is empty in cases where no layers are decrypted, so these should be ignored.
+        if msmt.is_none() {
+          return Ok(PartialRecoveredMessage {
+            measurement: None,
+            next_message: None,
+          });
+        }
+
+        // When the measurement is recovered then we output it
         let msg = match ident_nested_msg {
           None => None,
-          Some(m) => Some(m.message),
+          Some(nm) => Some(nm.message),
         };
         Ok(PartialRecoveredMessage {
           measurement: msmt,
@@ -548,29 +509,42 @@ pub fn recover(
   let ciphertexts = subset.iter().map(|t| t.ciphertext.clone());
   let plaintexts = ciphertexts.map(|c| c.decrypt(key, "star_encrypt"));
 
-  let splits: Vec<(Vec<u8>, NestedAssociatedData)> = plaintexts
-    .map(|slice| {
-      // parse all measurement bytes we discard the first four
-      // bytes, these give the length, but for now the length of
-      // each entry is fixed as 32 bytes
-      let bytes = slice[..4 + MAX_MEASUREMENT_LEN].to_vec();
-      let measurement_bytes = load_bytes(&bytes).unwrap().to_vec();
+  let splits: Vec<Result<(Vec<u8>, NestedAssociatedData), NestedSTARError>> =
+    plaintexts
+      .map(|slice| {
+        // parse all measurement bytes
+        if let Some(buf) = load_bytes(&slice) {
+          // parse remaining bytes of auxiliary data
+          let rem = &slice[4 + buf.len()..];
+          if let Some(aux_bytes) = load_bytes(rem) {
+            let measurement_bytes = buf.to_vec();
+            if let Ok(aux) = bincode::deserialize(aux_bytes) {
+              return Ok((measurement_bytes, aux));
+            } else {
+              return Err(NestedSTARError::SerdeError);
+            }
+          }
+        }
+        Err(NestedSTARError::MessageParseError)
+      })
+      .collect();
 
-      // parse remaining bytes of auxiliary data
-      let rem = &slice[4 + measurement_bytes.len() as usize..];
-      let aux_bytes = load_bytes(rem).unwrap();
-      let aux: NestedAssociatedData = bincode::deserialize(aux_bytes).unwrap();
-      (measurement_bytes, aux)
-    })
-    .collect();
+  // we also ensure that no message parsing errors occurred, we should
+  // recover with only a threshold number of messages, so any error that
+  // occurs should be fatal for recovery
+  if splits.iter().any(|x| x.is_err()) {
+    return Err(NestedSTARError::MessageParseError);
+  }
 
-  // check that decrypted measurements all have the same value
-  let measurement = &splits[0].0;
-  for new_measurement in splits.iter().skip(1) {
-    if &new_measurement.0 != measurement {
+  // check that decrypted measurements all have the same value.
+  // we can unwrap here because errors should have been caught above
+  let measurement = &splits[0].as_ref().unwrap().0;
+  for to_chk in splits.iter().skip(1) {
+    let measurement_to_chk = &to_chk.as_ref().unwrap().0;
+    if measurement_to_chk != measurement {
       return Err(NestedSTARError::ClientMeasurementMismatchError(
         base64::encode(measurement),
-        base64::encode(&new_measurement.0),
+        base64::encode(&measurement_to_chk),
       ));
     }
   }
@@ -579,7 +553,10 @@ pub fn recover(
   Ok(
     splits
       .into_iter()
-      .map(|(measurement_bytes, aux)| {
+      .map(|res| {
+        // we can unwrap here because errors should have been caught
+        // above
+        let (measurement_bytes, aux) = res.unwrap();
         let y = vec![measurement_bytes];
         let nm = NestedMeasurement::new(&y).unwrap();
         PartialMeasurement {
@@ -641,11 +618,7 @@ mod tests {
 
   #[test]
   fn construct_measurement() {
-    let measurement = vec![
-      vec![1u8; MAX_MEASUREMENT_LEN],
-      vec![2u8; MAX_MEASUREMENT_LEN],
-      vec![3u8; MAX_MEASUREMENT_LEN],
-    ];
+    let measurement = vec![vec![1u8; 16], vec![2u8; 32], vec![3u8; 48]];
     let nm = NestedMeasurement::new(measurement.as_slice()).unwrap();
     assert_eq!(nm.0[0].as_vec(), measurement[0].to_vec());
     assert_eq!(nm.0[1].as_vec(), measurement[1].to_vec());
@@ -653,23 +626,11 @@ mod tests {
   }
 
   #[test]
-  fn construct_too_long_measurement() {
-    let measurement = vec![
-      vec![55u8; MAX_MEASUREMENT_LEN],
-      vec![77u8; MAX_MEASUREMENT_LEN + 1],
-      vec![99u8; MAX_MEASUREMENT_LEN + 2],
-    ];
-    let nm = NestedMeasurement::new(&measurement);
-    assert!(nm.is_err());
-    assert_eq!(nm, Err(NestedSTARError::LongMeasurementError));
-  }
-
-  #[test]
   fn bad_number_of_layer_enc_keys() {
     let threshold = 1;
     let epoch = 0u8;
     let (_, mgs, mut keys) =
-      sample_client_measurement(&[1u8, 2u8, 3u8], 3, threshold, epoch);
+      sample_client_measurement(&[1u8, 2u8, 3u8], threshold, epoch);
     keys.pop();
     let rand = sample_randomness(&mgs);
     let nmsg = NestedMessage::new(&mgs, &rand, &keys, &[], epoch);
@@ -685,7 +646,7 @@ mod tests {
     let threshold = 1;
     let epoch = 0u8;
     let (_, mgs, keys) =
-      sample_client_measurement(&[1u8, 2u8, 3u8], 3, threshold, epoch);
+      sample_client_measurement(&[1u8, 2u8, 3u8], threshold, epoch);
     let mut rand = sample_randomness(&mgs);
     rand.pop();
     let nmsg = NestedMessage::new(&mgs, &rand, &keys, &[], epoch);
@@ -845,12 +806,8 @@ mod tests {
     let mut messages: Vec<NestedMessage> = Vec::new();
     let mut measurements = Vec::new();
     for input in inputs.iter().take(num_clients) {
-      let (nested_m, mgs, keys) = sample_client_measurement(
-        input,
-        measurement_len,
-        threshold as u32,
-        epoch,
-      );
+      let (nested_m, mgs, keys) =
+        sample_client_measurement(input, threshold as u32, epoch);
       let mut added_data = &vec![];
       if aux.is_some() {
         added_data = aux.as_ref().unwrap();
@@ -907,13 +864,15 @@ mod tests {
 
   fn sample_client_measurement(
     vals: &[u8],
-    measurement_len: usize,
     threshold: u32,
     epoch: u8,
   ) -> (NestedMeasurement, Vec<MessageGenerator>, Vec<Vec<u8>>) {
     let mut measurement: Vec<Vec<u8>> = Vec::new();
-    for &x in vals.iter().take(measurement_len) {
-      measurement.push(vec![x; MAX_MEASUREMENT_LEN]);
+    // There is no limit on measurement lengths, we just fix these for
+    // making it possible to establish test vectors
+    let check_lens = [32, 91, 400];
+    for (i, &x) in vals.iter().enumerate() {
+      measurement.push(vec![x; check_lens[i % check_lens.len()]]);
     }
     let nm = NestedMeasurement::new(&measurement).unwrap();
     let mgs = nm.get_message_generators(threshold, epoch);
@@ -925,7 +884,7 @@ mod tests {
     let threshold = 1;
     let epoch = 0u8;
     let (nm, mgs, keys) =
-      sample_client_measurement(&[1u8, 2u8, 3u8], 3, threshold, epoch);
+      sample_client_measurement(&[1u8, 2u8, 3u8], threshold, epoch);
 
     // check tags and measurement in each layer
     let mut added_data = &vec![];
@@ -942,14 +901,14 @@ mod tests {
         119,
       ],
       vec![
-        129, 108, 92, 224, 25, 162, 44, 213, 211, 31, 134, 212, 156, 119, 130,
-        46, 209, 216, 171, 70, 143, 75, 110, 77, 196, 200, 176, 20, 135, 114,
-        218, 44,
+        0, 194, 167, 145, 145, 232, 142, 69, 186, 245, 187, 201, 46, 220, 222,
+        58, 71, 157, 253, 5, 198, 73, 244, 146, 64, 194, 149, 20, 228, 217,
+        201, 140,
       ],
       vec![
-        105, 219, 117, 161, 102, 198, 138, 73, 23, 173, 68, 241, 95, 64, 247,
-        158, 201, 69, 253, 121, 216, 163, 75, 38, 33, 196, 46, 186, 77, 53,
-        203, 136,
+        67, 188, 75, 167, 174, 162, 3, 192, 54, 197, 53, 85, 139, 165, 228, 65,
+        221, 98, 95, 103, 27, 244, 179, 115, 130, 210, 247, 22, 143, 113, 171,
+        185,
       ],
     ];
     let aux_ref = aux.as_ref();
@@ -967,11 +926,13 @@ mod tests {
         .decrypt(&star_key, "star_encrypt");
 
       // check measurement value first 4 bytes are just for length
-      let res_measurement = res[4..4 + MAX_MEASUREMENT_LEN].to_vec();
+      let res_measurement = load_bytes(&res).unwrap().to_vec();
       assert_eq!(res_measurement, nm.get_layer_as_bytes(i));
 
       // check aux data
-      let res_aux = res[4 + MAX_MEASUREMENT_LEN..].to_vec();
+      let aux_check_bytes = load_bytes(&res[4 + res_measurement.len()..])
+        .unwrap()
+        .to_vec();
       let mut add_data = NestedAssociatedData {
         key: None,
         data: vec![],
@@ -984,7 +945,6 @@ mod tests {
       } else {
         add_data.data = vec![];
       }
-      let aux_check_bytes = load_bytes(&res_aux).unwrap();
       let serialized_aux = bincode::serialize(&add_data).unwrap();
       assert_eq!(aux_check_bytes.len() as usize, serialized_aux.len());
       assert_eq!(aux_check_bytes, serialized_aux);
