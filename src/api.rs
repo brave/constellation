@@ -43,15 +43,19 @@ pub mod client {
   /// the randomness server, to retrieve randomness for each layer of
   /// the nested measurement.
   ///
-  /// The output of the function can be sent directly to the randomness server.
+  /// Each element of the output of the function can base64 encoded, and
+  /// sent to the randomness server.
   pub fn construct_randomness_request(
     rrs: &RandomnessRequestState,
-  ) -> Result<Vec<u8>, NestedSTARError> {
-    serde_json::to_vec(rrs.request())
-      .map_err(|_| NestedSTARError::SerdeJSONError)
+  ) -> Vec<Vec<u8>> {
+    rrs
+      .blinded_points()
+      .iter()
+      .map(|p| p.as_bytes().to_vec())
+      .collect()
   }
 
-  /// In `construct_message` the client uses the output from
+  /// In `construct_message` the client uses the base64 decoded output from
   /// the JSON response of the randomness server (the generated randomness) and the
   /// output of `prepare_measurement` (containing the nested measurement/blinded points)
   /// and generates a bincode-formatted aggregation message.
@@ -59,14 +63,23 @@ pub mod client {
   /// The client can optionally specify any amount of additional data
   /// to be included with their message in `aux`.
   pub fn construct_message(
-    randomness_response: &[u8],
+    randomness_points: &[&[u8]],
+    randomness_proofs: Option<&[&[u8]]>,
     rrs: &RandomnessRequestState,
     verification_key: &Option<ppoprf::ServerPublicKey>,
     aux_bytes: &[u8],
     threshold: u32,
   ) -> Result<Vec<u8>, NestedSTARError> {
-    let parsed_response =
-      process_randomness_response(rrs.blinded_points(), randomness_response)?;
+    if (randomness_proofs.is_some() && verification_key.is_none())
+      || (randomness_proofs.is_none() && verification_key.is_some())
+    {
+      return Err(NestedSTARError::MissingVerificationParams);
+    }
+    let parsed_response = process_randomness_response(
+      rrs.blinded_points(),
+      randomness_points,
+      randomness_proofs,
+    )?;
     let finalized =
       rrs.finalize_response(&parsed_response, verification_key)?;
     let mgf = MessageGeneration::new(rrs.rsf().clone(), finalized)?;
@@ -152,7 +165,9 @@ pub mod server {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::randomness::testing::{LocalFetcher, PPOPRF_SERVER};
+  use crate::randomness::testing::{
+    LocalFetcher, LocalFetcherResponse, PPOPRF_SERVER,
+  };
   use serde_json::Value;
 
   #[test]
@@ -164,12 +179,16 @@ mod tests {
     let random_fetcher = LocalFetcher::new();
     let aux = "added_data".as_bytes().to_vec();
     let rrs = client::prepare_measurement(&measurement, epoch).unwrap();
-    let req = client::construct_randomness_request(&rrs).unwrap();
+    let req = client::construct_randomness_request(&rrs);
 
-    let resp = random_fetcher.eval(&req).unwrap();
+    let req_slice_vec: Vec<&[u8]> = req.iter().map(|v| v.as_slice()).collect();
+    let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
+    let (points_slice_vec, proofs_slice_vec) =
+      get_eval_output_slice_vecs(&resp);
 
     let msg = client::construct_message(
-      &resp,
+      &points_slice_vec,
+      Some(&proofs_slice_vec),
       &rrs,
       &Some(PPOPRF_SERVER.get_public_key()),
       &aux,
@@ -193,12 +212,16 @@ mod tests {
       vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
     let random_fetcher = LocalFetcher::new();
     let rrs = client::prepare_measurement(&measurement, c_epoch).unwrap();
-    let req = client::construct_randomness_request(&rrs).unwrap();
+    let req = client::construct_randomness_request(&rrs);
 
-    let resp = random_fetcher.eval(&req).unwrap();
+    let req_slice_vec: Vec<&[u8]> = req.iter().map(|v| v.as_slice()).collect();
+    let resp = random_fetcher.eval(&req_slice_vec, c_epoch).unwrap();
+    let (points_slice_vec, proofs_slice_vec) =
+      get_eval_output_slice_vecs(&resp);
 
     let msg = client::construct_message(
-      &resp,
+      &points_slice_vec,
+      Some(&proofs_slice_vec),
       &rrs,
       &Some(PPOPRF_SERVER.get_public_key()),
       &[],
@@ -221,12 +244,17 @@ mod tests {
       .into_iter()
       .map(|_| {
         let rrs = client::prepare_measurement(&measurement, epoch).unwrap();
-        let req = client::construct_randomness_request(&rrs).unwrap();
+        let req = client::construct_randomness_request(&rrs);
 
-        let resp = random_fetcher.eval(&req).unwrap();
+        let req_slice_vec: Vec<&[u8]> =
+          req.iter().map(|v| v.as_slice()).collect();
+        let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
+        let (points_slice_vec, proofs_slice_vec) =
+          get_eval_output_slice_vecs(&resp);
 
         client::construct_message(
-          &resp,
+          &points_slice_vec,
+          Some(&proofs_slice_vec),
           &rrs,
           &Some(PPOPRF_SERVER.get_public_key()),
           &[],
@@ -238,6 +266,23 @@ mod tests {
     let agg_res = server::aggregate(&messages, threshold - 1, epoch, 2);
     assert_eq!(agg_res.num_recovery_errors(), 2);
     assert_eq!(agg_res.outputs().len(), 0);
+  }
+
+  fn get_eval_output_slice_vecs(
+    resp: &LocalFetcherResponse,
+  ) -> (Vec<&[u8]>, Vec<&[u8]>) {
+    (
+      resp
+        .serialized_points
+        .iter()
+        .map(|v| v.as_slice())
+        .collect(),
+      resp
+        .serialized_proofs
+        .iter()
+        .map(|v| v.as_slice())
+        .collect(),
+    )
   }
 
   #[test]
@@ -329,12 +374,17 @@ mod tests {
       .iter()
       .map(|m| {
         let rrs = client::prepare_measurement(m, epoch).unwrap();
-        let req = client::construct_randomness_request(&rrs).unwrap();
+        let req = client::construct_randomness_request(&rrs);
 
-        let resp = random_fetcher.eval(&req).unwrap();
+        let req_slice_vec: Vec<&[u8]> =
+          req.iter().map(|v| v.as_slice()).collect();
+        let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
+        let (points_slice_vec, proofs_slice_vec) =
+          get_eval_output_slice_vecs(&resp);
 
         client::construct_message(
-          &resp,
+          &points_slice_vec,
+          Some(&proofs_slice_vec),
           &rrs,
           &Some(PPOPRF_SERVER.get_public_key()),
           &aux,
@@ -357,12 +407,17 @@ mod tests {
         epoch,
       )
       .unwrap();
-      let req = client::construct_randomness_request(&rrs).unwrap();
+      let req = client::construct_randomness_request(&rrs);
 
-      let resp = random_fetcher.eval(&req).unwrap();
+      let req_slice_vec: Vec<&[u8]> =
+        req.iter().map(|v| v.as_slice()).collect();
+      let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
+      let (points_slice_vec, proofs_slice_vec) =
+        get_eval_output_slice_vecs(&resp);
 
       let msg = client::construct_message(
-        &resp,
+        &points_slice_vec,
+        Some(&proofs_slice_vec),
         &rrs,
         &Some(PPOPRF_SERVER.get_public_key()),
         &aux,

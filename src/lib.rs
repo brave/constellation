@@ -31,7 +31,6 @@
 //! # use nested_sta_rs::errors::*;
 //! # use nested_sta_rs::format::*;
 //! #
-//! # let public_key = None;
 //! let threshold = 10;
 //! let epoch = 0u8;
 //! let random_fetcher = RandomnessFetcher::new();
@@ -41,11 +40,23 @@
 //!
 //! let measurements = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
 //! let rrs = client::prepare_measurement(&measurements, epoch).unwrap();
-//! let req = client::construct_randomness_request(&rrs).unwrap();
+//! let req = client::construct_randomness_request(&rrs);
 //!
-//! let resp = random_fetcher.eval(&req).unwrap();
+//! let req_slice_vec: Vec<&[u8]> = req.iter().map(|v| v.as_slice()).collect();
+//! let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
 //!
-//! client::construct_message(&resp, &rrs, &public_key, &example_aux, threshold).unwrap();
+//! let points_slice_vec: Vec<&[u8]> =
+//!   resp.serialized_points.iter().map(|v| v.as_slice()).collect();
+//! let proofs_slice_vec: Vec<&[u8]> =
+//!   resp.serialized_proofs.iter().map(|v| v.as_slice()).collect();
+//! client::construct_message(
+//!   &points_slice_vec,
+//!   Some(&proofs_slice_vec),
+//!   &rrs,
+//!   &Some(random_fetcher.get_server().get_public_key()),
+//!   &example_aux,
+//!   threshold
+//! ).unwrap();
 //! ```
 //!
 //! ### Server
@@ -69,7 +80,6 @@
 //! # use nested_sta_rs::errors::*;
 //! # use nested_sta_rs::format::*;
 //! #
-//! # let public_key = None;
 //! let threshold = 10;
 //! let epoch = 0u8;
 //! let random_fetcher = RandomnessFetcher::new();
@@ -79,14 +89,20 @@
 //! let client_messages_to_reveal: Vec<Vec<u8>> = (0..threshold).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
 //!   let rrs = client::prepare_measurement(&measurements_1, epoch).unwrap();
-//!   let req = client::construct_randomness_request(&rrs).unwrap();
+//!   let req = client::construct_randomness_request(&rrs);
 //!
-//!   let resp = random_fetcher.eval(&req).unwrap();
+//!   let req_slice_vec: Vec<&[u8]> = req.iter().map(|v| v.as_slice()).collect();
+//!   let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
 //!
+//!   let points_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_points.iter().map(|v| v.as_slice()).collect();
+//!   let proofs_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_proofs.iter().map(|v| v.as_slice()).collect();
 //!   client::construct_message(
-//!     &resp,
+//!     &points_slice_vec,
+//!     Some(&proofs_slice_vec),
 //!     &rrs,
-//!     &public_key,
+//!     &Some(random_fetcher.get_server().get_public_key()),
 //!     &example_aux,
 //!     threshold
 //!   ).unwrap()
@@ -97,14 +113,20 @@
 //! let client_messages_to_hide: Vec<Vec<u8>> = (0..2).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
 //!   let rrs = client::prepare_measurement(&measurements_2, epoch).unwrap();
-//!   let req = client::construct_randomness_request(&rrs).unwrap();
+//!   let req = client::construct_randomness_request(&rrs);
 //!
-//!   let resp = random_fetcher.eval(&req).unwrap();
+//!   let req_slice_vec: Vec<&[u8]> = req.iter().map(|v| v.as_slice()).collect();
+//!   let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
 //!
+//!   let points_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_points.iter().map(|v| v.as_slice()).collect();
+//!   let proofs_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_proofs.iter().map(|v| v.as_slice()).collect();
 //!   client::construct_message(
-//!     &resp,
+//!     &points_slice_vec,
+//!     Some(&proofs_slice_vec),
 //!     &rrs,
-//!     &public_key,
+//!     &Some(random_fetcher.get_server().get_public_key()),
 //!     &example_aux,
 //!     threshold
 //!   ).unwrap()
@@ -142,7 +164,6 @@
 //! # use nested_sta_rs::errors::*;
 //! # use nested_sta_rs::format::*;
 //! #
-//! # let public_key = None;
 //! let threshold = 10;
 //! let epoch = 0u8;
 //! let random_fetcher = RandomnessFetcher::new();
@@ -152,14 +173,20 @@
 //! let client_messages_1: Vec<Vec<u8>> = (0..5).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
 //!   let rrs = client::prepare_measurement(&measurements_1, epoch).unwrap();
-//!   let req = client::construct_randomness_request(&rrs).unwrap();
+//!   let req = client::construct_randomness_request(&rrs);
 //!
-//!   let resp = random_fetcher.eval(&req).unwrap();
+//!   let req_slice_vec: Vec<&[u8]> = req.iter().map(|v| v.as_slice()).collect();
+//!   let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
 //!
+//!   let points_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_points.iter().map(|v| v.as_slice()).collect();
+//!   let proofs_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_proofs.iter().map(|v| v.as_slice()).collect();
 //!   client::construct_message(
-//!     &resp,
+//!     &points_slice_vec,
+//!     Some(&proofs_slice_vec),
 //!     &rrs,
-//!     &public_key,
+//!     &Some(random_fetcher.get_server().get_public_key()),
 //!     &example_aux,
 //!     threshold
 //!   ).unwrap()
@@ -170,14 +197,20 @@
 //! let client_messages_2: Vec<Vec<u8>> = (0..5).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
 //!   let rrs = client::prepare_measurement(&measurements_2, epoch).unwrap();
-//!   let req = client::construct_randomness_request(&rrs).unwrap();
+//!   let req = client::construct_randomness_request(&rrs);
 //!
-//!   let resp = random_fetcher.eval(&req).unwrap();
+//!   let req_slice_vec: Vec<&[u8]> = req.iter().map(|v| v.as_slice()).collect();
+//!   let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
 //!
+//!   let points_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_points.iter().map(|v| v.as_slice()).collect();
+//!   let proofs_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_proofs.iter().map(|v| v.as_slice()).collect();
 //!   client::construct_message(
-//!     &resp,
+//!     &points_slice_vec,
+//!     Some(&proofs_slice_vec),
 //!     &rrs,
-//!     &public_key,
+//!     &Some(random_fetcher.get_server().get_public_key()),
 //!     &example_aux,
 //!     threshold
 //!   ).unwrap()
@@ -223,6 +256,8 @@ pub mod errors {
     BincodeError,
     RandomnessSamplingError(String),
     MessageParseError,
+    ProofMissing,
+    MissingVerificationParams,
   }
 
   impl std::error::Error for NestedSTARError {}
@@ -238,6 +273,8 @@ pub mod errors {
         NestedSTARError::BincodeError => write!(f, "An error occurred during Bincode serialization/deserialization."),
         NestedSTARError::RandomnessSamplingError(err_string) => write!(f, "An error occurred during the sampling of randomness: {}.", err_string),
         NestedSTARError::MessageParseError => write!(f, "An error when attempting to parse the message."),
+        NestedSTARError::ProofMissing => write!(f, "Proof missing for randomness point."),
+        NestedSTARError::MissingVerificationParams => write!(f, "Verification key or proofs missing, must supply both or none.")
       }
     }
   }

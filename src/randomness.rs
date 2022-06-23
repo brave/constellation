@@ -3,44 +3,35 @@ use crate::errors::NestedSTARError;
 use crate::format::RandomnessSampling;
 use ppoprf::ppoprf;
 
-use serde::{Deserialize, Serialize};
-
-const QUERY_LABEL: &str = "Client randomness request";
-const RESPONSE_LABEL: &str = "Server randomness response";
-
-/// Explicit request body.
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Request {
-  name: String,
-  epoch: u8,
-  points: Vec<ppoprf::Point>,
-}
-
-/// Explicit response body.
-#[derive(Serialize, Deserialize)]
-pub struct Response {
-  name: String,
-  results: Vec<ppoprf::Evaluation>,
-}
-
 pub fn process_randomness_response(
   points: &[ppoprf::Point],
-  resp_data: &[u8],
+  resp_points: &[&[u8]],
+  resp_proofs: Option<&[&[u8]]>,
 ) -> Result<Vec<ppoprf::Evaluation>, NestedSTARError> {
-  let r: Response = serde_json::from_slice(resp_data)
-    .map_err(|_| NestedSTARError::SerdeJSONError)?;
-  // Check that response is well-formed
-  if r.name != RESPONSE_LABEL {
-    return Err(NestedSTARError::RandomnessSamplingError(format!(
-      "Incorrect response label specified: {}",
-      r.name
-    )));
-  }
-  let results = r.results;
-  if results.len() != points.len() {
+  let results = resp_points
+    .iter()
+    .enumerate()
+    .map(|(i, v)| {
+      let proof = match resp_proofs {
+        Some(proofs) => {
+          let data = proofs.get(i).ok_or(NestedSTARError::ProofMissing)?;
+          Some(
+            ppoprf::ProofDLEQ::load_from_bincode(data)
+              .map_err(|_| NestedSTARError::BincodeError)?,
+          )
+        }
+        None => None,
+      };
+      Ok(ppoprf::Evaluation {
+        output: ppoprf::Point::from(*v),
+        proof,
+      })
+    })
+    .collect::<Result<Vec<ppoprf::Evaluation>, NestedSTARError>>()?;
+  if resp_points.len() != points.len() {
     return Err(NestedSTARError::RandomnessSamplingError(format!(
       "Server returned {} results, but expected {}.",
-      results.len(),
+      resp_points.len(),
       points.len(),
     )));
   }
@@ -51,29 +42,25 @@ pub fn process_randomness_response(
 /// randomness requests
 pub struct RequestState {
   rsf: RandomnessSampling,
-  req: Request,
+  req_points: Vec<ppoprf::Point>,
   blinds: Vec<ppoprf::CurveScalar>,
 }
 impl RequestState {
   pub fn new(rsf: RandomnessSampling) -> Self {
     let measurements = rsf.input();
-    let epoch = rsf.epoch();
-    let mut blinded_points = Vec::with_capacity(measurements.len());
+    let mut req_points = Vec::with_capacity(measurements.len());
     let mut blinds = Vec::with_capacity(measurements.len());
     for x in measurements {
       let (p, r) = ppoprf::Client::blind(x);
-      blinded_points.push(p);
+      req_points.push(p);
       blinds.push(r);
     }
 
-    // convert blinded points into a single response
-    let req = Request {
-      name: QUERY_LABEL.into(),
-      epoch,
-      points: blinded_points,
-    };
-
-    Self { rsf, req, blinds }
+    Self {
+      rsf,
+      req_points,
+      blinds,
+    }
   }
 
   // Finalize randomness outputs
@@ -90,7 +77,9 @@ impl RequestState {
       // if a server public key was specified, attempt to verify the
       // result of the randomness
       if let Some(pk) = public_key {
-        if !ppoprf::Client::verify(pk, blinded_point, result, self.epoch()) {
+        if result.proof.is_some()
+          && !ppoprf::Client::verify(pk, blinded_point, result, self.epoch())
+        {
           return Err(NestedSTARError::RandomnessSamplingError(
             "Client ZK proof verification failed".into(),
           ));
@@ -110,12 +99,8 @@ impl RequestState {
     Ok(rand_out)
   }
 
-  pub fn request(&self) -> &Request {
-    &self.req
-  }
-
   pub fn blinded_points(&self) -> &[ppoprf::Point] {
-    &self.req.points
+    &self.req_points
   }
 
   fn measurement(&self, idx: usize) -> Vec<u8> {
@@ -157,6 +142,13 @@ pub mod testing {
   pub struct LocalFetcher {
     ppoprf_server: PPOPRFServer,
   }
+
+  #[derive(Default)]
+  pub struct LocalFetcherResponse {
+    pub serialized_points: Vec<Vec<u8>>,
+    pub serialized_proofs: Vec<Vec<u8>>,
+  }
+
   impl LocalFetcher {
     pub fn new() -> Self {
       Self {
@@ -166,26 +158,32 @@ pub mod testing {
 
     pub fn eval(
       &self,
-      serialized_req: &[u8],
-    ) -> Result<Vec<u8>, NestedSTARError> {
-      let req: Request = serde_json::from_slice(serialized_req)
-        .map_err(|_| NestedSTARError::SerdeJSONError)?;
+      serialized_points: &[&[u8]],
+      epoch: u8,
+    ) -> Result<LocalFetcherResponse, NestedSTARError> {
       // Create a mock response based on expected PPOPRF functionality
-      let mut evaluations = Vec::new();
-      for point in req.points.iter() {
-        let eval_result = self.ppoprf_server.eval(point, req.epoch, true);
-        if let Err(e) = eval_result {
-          return Err(NestedSTARError::RandomnessSamplingError(e.to_string()));
-        }
-        evaluations.push(eval_result.unwrap());
+      let mut result: LocalFetcherResponse = Default::default();
+      for serialized_point in serialized_points.iter() {
+        let point = ppoprf::Point::from(*serialized_point);
+        match self.ppoprf_server.eval(&point, epoch, true) {
+          Err(e) => {
+            return Err(NestedSTARError::RandomnessSamplingError(e.to_string()))
+          }
+          Ok(eval) => {
+            result
+              .serialized_points
+              .push(eval.output.as_bytes().to_vec());
+            result.serialized_proofs.push(
+              eval
+                .proof
+                .unwrap()
+                .serialize_to_bincode()
+                .map_err(|_| NestedSTARError::BincodeError)?,
+            );
+          }
+        };
       }
-      let resp = Response {
-        name: RESPONSE_LABEL.into(),
-        results: evaluations,
-      };
-      let serialized_resp = serde_json::to_vec(&resp)
-        .map_err(|_| NestedSTARError::SerdeJSONError)?;
-      Ok(serialized_resp)
+      Ok(result)
     }
 
     pub fn get_server(&self) -> &PPOPRFServer {
