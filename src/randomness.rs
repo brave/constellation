@@ -3,54 +3,64 @@ use crate::errors::NestedSTARError;
 use crate::format::RandomnessSampling;
 use ppoprf::ppoprf;
 
-use reqwest::blocking::Client as HttpClient;
-use serde::{Deserialize, Serialize};
-
-const QUERY_LABEL: &str = "Client randomness request";
-const RESPONSE_LABEL: &str = "Server randomness response";
-
-/// Explicit request body.
-#[derive(Serialize, Clone)]
-pub struct Request {
-  name: String,
-  epoch: u8,
-  points: Vec<ppoprf::Point>,
-}
-
-/// Explicit response body.
-#[derive(Serialize, Deserialize)]
-pub struct Response {
-  name: String,
-  results: Vec<ppoprf::Evaluation>,
+pub fn process_randomness_response(
+  points: &[ppoprf::Point],
+  resp_points: &[&[u8]],
+  resp_proofs: Option<&[&[u8]]>,
+) -> Result<Vec<ppoprf::Evaluation>, NestedSTARError> {
+  let results = resp_points
+    .iter()
+    .enumerate()
+    .map(|(i, v)| {
+      let proof = match resp_proofs {
+        Some(proofs) => {
+          let data = proofs.get(i).ok_or(NestedSTARError::ProofMissing)?;
+          Some(
+            ppoprf::ProofDLEQ::load_from_bincode(data)
+              .map_err(|_| NestedSTARError::BincodeError)?,
+          )
+        }
+        None => None,
+      };
+      Ok(ppoprf::Evaluation {
+        output: ppoprf::Point::from(*v),
+        proof,
+      })
+    })
+    .collect::<Result<Vec<ppoprf::Evaluation>, NestedSTARError>>()?;
+  if resp_points.len() != points.len() {
+    return Err(NestedSTARError::RandomnessSamplingError(format!(
+      "Server returned {} results, but expected {}.",
+      resp_points.len(),
+      points.len(),
+    )));
+  }
+  Ok(results)
 }
 
 /// `RequestState` for building and building all state associated with
 /// randomness requests
 pub struct RequestState {
   rsf: RandomnessSampling,
-  req: Request,
+  req_points: Vec<ppoprf::Point>,
   blinds: Vec<ppoprf::CurveScalar>,
 }
 impl RequestState {
   pub fn new(rsf: RandomnessSampling) -> Self {
     let measurements = rsf.input();
-    let epoch = rsf.epoch();
-    let mut blinded_points = Vec::with_capacity(measurements.len());
+    let mut req_points = Vec::with_capacity(measurements.len());
     let mut blinds = Vec::with_capacity(measurements.len());
     for x in measurements {
       let (p, r) = ppoprf::Client::blind(x);
-      blinded_points.push(p);
+      req_points.push(p);
       blinds.push(r);
     }
 
-    // convert blinded points into a single response
-    let req = Request {
-      name: QUERY_LABEL.into(),
-      epoch,
-      points: blinded_points,
-    };
-
-    Self { rsf, req, blinds }
+    Self {
+      rsf,
+      req_points,
+      blinds,
+    }
   }
 
   // Finalize randomness outputs
@@ -67,7 +77,9 @@ impl RequestState {
       // if a server public key was specified, attempt to verify the
       // result of the randomness
       if let Some(pk) = public_key {
-        if !ppoprf::Client::verify(pk, blinded_point, result, self.epoch()) {
+        if result.proof.is_some()
+          && !ppoprf::Client::verify(pk, blinded_point, result, self.epoch())
+        {
           return Err(NestedSTARError::RandomnessSamplingError(
             "Client ZK proof verification failed".into(),
           ));
@@ -87,12 +99,8 @@ impl RequestState {
     Ok(rand_out)
   }
 
-  pub fn request(&self) -> &Request {
-    &self.req
-  }
-
-  fn blinded_points(&self) -> &[ppoprf::Point] {
-    &self.req.points
+  pub fn blinded_points(&self) -> &[ppoprf::Point] {
+    &self.req_points
   }
 
   fn measurement(&self, idx: usize) -> Vec<u8> {
@@ -106,71 +114,9 @@ impl RequestState {
   fn epoch(&self) -> u8 {
     self.rsf.epoch()
   }
-}
 
-/// The `Fetcher` trait defines the fetching interface for sampling
-/// consistent randomness for clients
-pub trait Fetcher {
-  /// The `fetch` function uses the constructed randomness request to
-  /// sample randomness from the server found at the specified URL.
-  fn fetch(
-    &self,
-    req: &Request,
-  ) -> Result<Vec<ppoprf::Evaluation>, NestedSTARError>;
-}
-
-/// The `HTTPFetcher` provides a default implementation of the
-/// randomness fetcher trait, using reqwest for launching queries to a
-/// randomness server that runs a PPOPRF protocol.
-pub struct HTTPFetcher {
-  url: String,
-}
-impl Fetcher for HTTPFetcher {
-  fn fetch(
-    &self,
-    req: &Request,
-  ) -> Result<Vec<ppoprf::Evaluation>, NestedSTARError> {
-    // send request and process response
-    let resp = HttpClient::new()
-      .post(&self.url)
-      .json(req)
-      .send()
-      .map_err(|e| NestedSTARError::RandomnessSamplingError(e.to_string()))?;
-    // check status okay
-    let status = resp.status();
-    if !status.is_success() {
-      return Err(NestedSTARError::RandomnessSamplingError(format!(
-        "Server returned bad status code: {}",
-        status
-      )));
-    }
-    // attempt to parse JSON response
-    match resp.json::<Response>() {
-      Ok(r) => {
-        // Check that response is well-formed
-        if r.name != RESPONSE_LABEL {
-          return Err(NestedSTARError::RandomnessSamplingError(format!(
-            "Incorrect response label specified: {}",
-            r.name
-          )));
-        }
-        let results = r.results;
-        if results.len() != req.points.len() {
-          return Err(NestedSTARError::RandomnessSamplingError(format!(
-            "Server returned {} results, but expected {}.",
-            results.len(),
-            req.points.len(),
-          )));
-        }
-        Ok(results)
-      }
-      Err(e) => Err(NestedSTARError::RandomnessSamplingError(e.to_string())),
-    }
-  }
-}
-impl HTTPFetcher {
-  pub fn new(url: &str) -> Self {
-    Self { url: url.into() }
+  pub fn rsf(&self) -> &RandomnessSampling {
+    &self.rsf
   }
 }
 
@@ -196,15 +142,13 @@ pub mod testing {
   pub struct LocalFetcher {
     ppoprf_server: PPOPRFServer,
   }
-  impl Fetcher for LocalFetcher {
-    fn fetch(
-      &self,
-      req: &Request,
-    ) -> Result<Vec<ppoprf::Evaluation>, NestedSTARError> {
-      let resp = self.eval(req)?;
-      Ok(resp.results)
-    }
+
+  #[derive(Default)]
+  pub struct LocalFetcherResponse {
+    pub serialized_points: Vec<Vec<u8>>,
+    pub serialized_proofs: Vec<Vec<u8>>,
   }
+
   impl LocalFetcher {
     pub fn new() -> Self {
       Self {
@@ -212,20 +156,34 @@ pub mod testing {
       }
     }
 
-    pub fn eval(&self, req: &Request) -> Result<Response, NestedSTARError> {
+    pub fn eval(
+      &self,
+      serialized_points: &[&[u8]],
+      epoch: u8,
+    ) -> Result<LocalFetcherResponse, NestedSTARError> {
       // Create a mock response based on expected PPOPRF functionality
-      let mut evaluations = Vec::new();
-      for point in req.points.iter() {
-        let eval_result = self.ppoprf_server.eval(point, req.epoch, true);
-        if let Err(e) = eval_result {
-          return Err(NestedSTARError::RandomnessSamplingError(e.to_string()));
-        }
-        evaluations.push(eval_result.unwrap());
+      let mut result: LocalFetcherResponse = Default::default();
+      for serialized_point in serialized_points.iter() {
+        let point = ppoprf::Point::from(*serialized_point);
+        match self.ppoprf_server.eval(&point, epoch, true) {
+          Err(e) => {
+            return Err(NestedSTARError::RandomnessSamplingError(e.to_string()))
+          }
+          Ok(eval) => {
+            result
+              .serialized_points
+              .push(eval.output.as_bytes().to_vec());
+            result.serialized_proofs.push(
+              eval
+                .proof
+                .unwrap()
+                .serialize_to_bincode()
+                .map_err(|_| NestedSTARError::BincodeError)?,
+            );
+          }
+        };
       }
-      Ok(Response {
-        name: RESPONSE_LABEL.into(),
-        results: evaluations,
-      })
+      Ok(result)
     }
 
     pub fn get_server(&self) -> &PPOPRFServer {
@@ -236,83 +194,5 @@ pub mod testing {
     fn default() -> Self {
       LocalFetcher::new()
     }
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::testing::LocalFetcher;
-  use super::*;
-  use crate::format::*;
-  use crate::internal::*;
-  use httpmock::prelude::*;
-  use serde_json::json;
-
-  #[test]
-  fn test_ppoprf_fetching() {
-    // Start a lightweight mock server.
-    let http_server = MockServer::start();
-    // We have to setup alternative endpoints for mocking stuff
-    let endpoint_1 = "/sample_1";
-    let endpoint_2 = "/sample_2";
-    let url_1 = &http_server.url(endpoint_1);
-    let url_2 = &http_server.url(endpoint_2);
-
-    // set epoch
-    let epoch = 0u8;
-
-    // sample two separate states for the same measurement (simulates
-    // two clients sharing the same measurement)
-    let nm = NestedMeasurement::new(&[
-      "hello".as_bytes().to_vec(),
-      "world".as_bytes().to_vec(),
-    ])
-    .unwrap();
-    let state_1 = RequestState::new(RandomnessSampling::new(&nm, epoch));
-    let state_2 = RequestState::new(RandomnessSampling::new(&nm, epoch));
-
-    // set up the ppoprf fetching instance that we are mocking
-    let mut pf = HTTPFetcher::new(url_1);
-
-    // set up a dummy fetching using the local fetcher instance to
-    // simulate local evaluation of the PPOPRF for checking results
-    let lf = LocalFetcher::new();
-
-    // mock_1 response for first evaluation
-    let mock_1 = http_server.mock(|when, then| {
-      when.method(POST).path(endpoint_1);
-      then
-        .status(200)
-        .header("content-type", "application/json")
-        .json_body(json!(lf.eval(&state_1.req).unwrap()));
-    });
-    let results_1 = pf.fetch(&state_1.req).unwrap();
-    let finalized_1 = state_1
-      .finalize_response(&results_1, &Some(lf.get_server().get_public_key()))
-      .unwrap();
-    mock_1.assert();
-
-    // mock_2 response for second evaluation
-    let mock_2 = http_server.mock(|when, then| {
-      when.method(POST).path(endpoint_2);
-      then
-        .status(200)
-        .header("content-type", "application/json")
-        .json_body(json!(lf.eval(&state_2.req).unwrap()));
-    });
-    // switch endpoint for new mock
-    pf.url = url_2.into();
-    // sample randomness
-    let results_2 = pf.fetch(&state_2.req).unwrap();
-    let finalized_2 = state_2
-      .finalize_response(&results_2, &Some(lf.get_server().get_public_key()))
-      .unwrap();
-    mock_2.assert();
-
-    // check finalized results length
-    assert_eq!(finalized_1.len(), nm.len());
-    assert_eq!(finalized_2.len(), nm.len());
-    // check finalized results are the same in both circumstances
-    assert_eq!(finalized_1, finalized_2);
   }
 }

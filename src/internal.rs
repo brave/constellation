@@ -521,7 +521,7 @@ pub fn recover(
             if let Ok(aux) = bincode::deserialize(aux_bytes) {
               return Ok((measurement_bytes, aux));
             } else {
-              return Err(NestedSTARError::SerdeError);
+              return Err(NestedSTARError::BincodeError);
             }
           }
         }
@@ -543,8 +543,8 @@ pub fn recover(
     let measurement_to_chk = &to_chk.as_ref().unwrap().0;
     if measurement_to_chk != measurement {
       return Err(NestedSTARError::ClientMeasurementMismatchError(
-        base64::encode(measurement),
-        base64::encode(&measurement_to_chk),
+        serde_json::to_string(measurement).unwrap(),
+        serde_json::to_string(&measurement_to_chk).unwrap(),
       ));
     }
   }
@@ -614,7 +614,10 @@ fn group_messages(node: &[IdentMessage]) -> Vec<Vec<usize>> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use insta::assert_snapshot;
   use sta_rs::share_recover;
+
+  const EXAMPLE_SHARE: &str = "CgAAAEAAAADCCH4ZhARNUDSJslRWE87ZG0NsgQfcH5flWkFNPmO5c3EOb/w/cTtzR4p6RPQgbR8lGjRfz6YGU3V/Bl0M43oLIAAAAFzChnIswE1u1zdSxAPmIekxbzqz6GqtjVK0g1NNFxxNIAAAAKmWDy+rBJcFElEnm8DNkIfi9k7S53iQxtuli/hUfZcsI832Xuq3l/KnUmJKjEa2T5VmLU5cRqfNgTpS77eOIA51qMtD+6dTBJM1VNq50xj+737l7/8B33mlFnLldj6QDA==";
 
   #[test]
   fn construct_measurement() {
@@ -673,6 +676,43 @@ mod tests {
   #[test]
   fn construct_and_check_message_with_aux_2() {
     construct_message(Some(vec![2u8; 15]));
+  }
+
+  #[test]
+  fn nested_message_serialization() {
+    let nm = NestedMessage {
+      epoch: 1u8,
+      unencrypted_layer: Message {
+        ciphertext: Ciphertext::from_bytes(&[7u8; 40]),
+        share: Share::from_bytes(&base64::decode(EXAMPLE_SHARE).unwrap())
+          .unwrap(),
+        tag: vec![12u8; 32],
+      },
+      encrypted_layers: vec![
+        Ciphertext::from_bytes(&[2u8; 16]),
+        Ciphertext::from_bytes(&[2u8; 25]),
+        Ciphertext::from_bytes(&[2u8; 33]),
+      ],
+    };
+    let snm = SerializableNestedMessage::from(nm);
+
+    let snm_bincode =
+      bincode::serialize(&snm).expect("Should serialize to bincode");
+
+    assert_snapshot!(base64::encode(&snm_bincode));
+
+    bincode::deserialize::<SerializableNestedMessage>(&snm_bincode)
+      .expect("Should load bincode");
+  }
+
+  #[test]
+  fn nested_message_bad_data_load() {
+    assert!(
+      bincode::deserialize::<SerializableNestedMessage>(&[7u8; 58]).is_err()
+    );
+    assert!(
+      bincode::deserialize::<SerializableNestedMessage>(&[21u8; 9000]).is_err()
+    );
   }
 
   #[test]

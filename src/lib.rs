@@ -31,21 +31,32 @@
 //! # use nested_sta_rs::errors::*;
 //! # use nested_sta_rs::format::*;
 //! #
-//! # let public_key = None;
 //! let threshold = 10;
 //! let epoch = 0u8;
+//! let random_fetcher = RandomnessFetcher::new();
 //!
 //! // setup randomness server information
 //! let example_aux = vec![1u8; 3];
 //!
 //! let measurements = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
-//! let rsf = client::format_measurement(&measurements, epoch).unwrap();
-//! let mgf = client::sample_randomness(
-//!   &RandomnessFetcher::new(),
-//!   rsf,
-//!   &public_key,
+//! let rrs = client::prepare_measurement(&measurements, epoch).unwrap();
+//! let req = client::construct_randomness_request(&rrs);
+//!
+//! let req_slice_vec: Vec<&[u8]> = req.iter().map(|v| v.as_slice()).collect();
+//! let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
+//!
+//! let points_slice_vec: Vec<&[u8]> =
+//!   resp.serialized_points.iter().map(|v| v.as_slice()).collect();
+//! let proofs_slice_vec: Vec<&[u8]> =
+//!   resp.serialized_proofs.iter().map(|v| v.as_slice()).collect();
+//! client::construct_message(
+//!   &points_slice_vec,
+//!   Some(&proofs_slice_vec),
+//!   &rrs,
+//!   &Some(random_fetcher.get_server().get_public_key()),
+//!   &example_aux,
+//!   threshold
 //! ).unwrap();
-//! client::construct_message(mgf, &example_aux, threshold).unwrap();
 //! ```
 //!
 //! ### Server
@@ -69,42 +80,56 @@
 //! # use nested_sta_rs::errors::*;
 //! # use nested_sta_rs::format::*;
 //! #
-//! # let public_key = None;
 //! let threshold = 10;
 //! let epoch = 0u8;
+//! let random_fetcher = RandomnessFetcher::new();
 //!
 //! // construct at least `threshold` client messages with the same measurement
 //! let measurements_1 = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
 //! let client_messages_to_reveal: Vec<Vec<u8>> = (0..threshold).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
-//!   let rsf = client::format_measurement(&measurements_1, epoch).unwrap();
-//!   let mgf = client::sample_randomness(
-//!     &RandomnessFetcher::new(),
-//!     rsf,
-//!     &public_key
-//!   ).unwrap();
+//!   let rrs = client::prepare_measurement(&measurements_1, epoch).unwrap();
+//!   let req = client::construct_randomness_request(&rrs);
+//!
+//!   let req_slice_vec: Vec<&[u8]> = req.iter().map(|v| v.as_slice()).collect();
+//!   let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
+//!
+//!   let points_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_points.iter().map(|v| v.as_slice()).collect();
+//!   let proofs_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_proofs.iter().map(|v| v.as_slice()).collect();
 //!   client::construct_message(
-//!     mgf,
+//!     &points_slice_vec,
+//!     Some(&proofs_slice_vec),
+//!     &rrs,
+//!     &Some(random_fetcher.get_server().get_public_key()),
 //!     &example_aux,
-//!     threshold,
-//!   ).unwrap().as_bytes().to_vec()
+//!     threshold
+//!   ).unwrap()
 //! }).collect();
 //!
 //! // construct a low number client messages with a different measurement
 //! let measurements_2 = vec!["something".as_bytes().to_vec(), "else".as_bytes().to_vec()];
 //! let client_messages_to_hide: Vec<Vec<u8>> = (0..2).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
-//!   let rsf = client::format_measurement(&measurements_2, epoch).unwrap();
-//!   let mgf = client::sample_randomness(
-//!     &RandomnessFetcher::new(),
-//!     rsf,
-//!     &public_key
-//!   ).unwrap();
+//!   let rrs = client::prepare_measurement(&measurements_2, epoch).unwrap();
+//!   let req = client::construct_randomness_request(&rrs);
+//!
+//!   let req_slice_vec: Vec<&[u8]> = req.iter().map(|v| v.as_slice()).collect();
+//!   let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
+//!
+//!   let points_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_points.iter().map(|v| v.as_slice()).collect();
+//!   let proofs_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_proofs.iter().map(|v| v.as_slice()).collect();
 //!   client::construct_message(
-//!     mgf,
+//!     &points_slice_vec,
+//!     Some(&proofs_slice_vec),
+//!     &rrs,
+//!     &Some(random_fetcher.get_server().get_public_key()),
 //!     &example_aux,
-//!     threshold,
-//!   ).unwrap().as_bytes().to_vec()
+//!     threshold
+//!   ).unwrap()
 //! }).collect();
 //!
 //! // aggregation reveals the client measurement that reaches the
@@ -139,42 +164,56 @@
 //! # use nested_sta_rs::errors::*;
 //! # use nested_sta_rs::format::*;
 //! #
-//! # let public_key = None;
 //! let threshold = 10;
 //! let epoch = 0u8;
+//! let random_fetcher = RandomnessFetcher::new();
 //!
 //! // construct a low number client messages with the same measurement
 //! let measurements_1 = vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
 //! let client_messages_1: Vec<Vec<u8>> = (0..5).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
-//!   let rsf = client::format_measurement(&measurements_1, epoch).unwrap();
-//!   let mgf = client::sample_randomness(
-//!     &RandomnessFetcher::new(),
-//!     rsf,
-//!     &public_key
-//!   ).unwrap();
+//!   let rrs = client::prepare_measurement(&measurements_1, epoch).unwrap();
+//!   let req = client::construct_randomness_request(&rrs);
+//!
+//!   let req_slice_vec: Vec<&[u8]> = req.iter().map(|v| v.as_slice()).collect();
+//!   let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
+//!
+//!   let points_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_points.iter().map(|v| v.as_slice()).collect();
+//!   let proofs_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_proofs.iter().map(|v| v.as_slice()).collect();
 //!   client::construct_message(
-//!     mgf,
+//!     &points_slice_vec,
+//!     Some(&proofs_slice_vec),
+//!     &rrs,
+//!     &Some(random_fetcher.get_server().get_public_key()),
 //!     &example_aux,
 //!     threshold
-//!   ).unwrap().as_bytes().to_vec()
+//!   ).unwrap()
 //! }).collect();
 //!
 //! // construct a low number of measurements that also share a prefix
 //! let measurements_2 = vec!["hello".as_bytes().to_vec(), "goodbye".as_bytes().to_vec()];
 //! let client_messages_2: Vec<Vec<u8>> = (0..5).into_iter().map(|i| {
 //!   let example_aux = vec![i as u8; 3];
-//!   let rsf = client::format_measurement(&measurements_2, epoch).unwrap();
-//!   let mgf = client::sample_randomness(
-//!     &RandomnessFetcher::new(),
-//!     rsf,
-//!     &public_key
-//!   ).unwrap();
+//!   let rrs = client::prepare_measurement(&measurements_2, epoch).unwrap();
+//!   let req = client::construct_randomness_request(&rrs);
+//!
+//!   let req_slice_vec: Vec<&[u8]> = req.iter().map(|v| v.as_slice()).collect();
+//!   let resp = random_fetcher.eval(&req_slice_vec, epoch).unwrap();
+//!
+//!   let points_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_points.iter().map(|v| v.as_slice()).collect();
+//!   let proofs_slice_vec: Vec<&[u8]> =
+//!     resp.serialized_proofs.iter().map(|v| v.as_slice()).collect();
 //!   client::construct_message(
-//!     mgf,
+//!     &points_slice_vec,
+//!     Some(&proofs_slice_vec),
+//!     &rrs,
+//!     &Some(random_fetcher.get_server().get_public_key()),
 //!     &example_aux,
 //!     threshold
-//!   ).unwrap().as_bytes().to_vec()
+//!   ).unwrap()
 //! }).collect();
 //!
 //! // aggregation reveals the partial client measurement `vec!["hello"]`,
@@ -213,9 +252,12 @@ pub mod errors {
     ClientMeasurementMismatchError(String, String),
     LayerEncryptionKeysError(usize, usize),
     NumMeasurementLayersError(usize, usize),
-    SerdeError,
+    SerdeJSONError,
+    BincodeError,
     RandomnessSamplingError(String),
     MessageParseError,
+    ProofMissing,
+    MissingVerificationParams,
   }
 
   impl std::error::Error for NestedSTARError {}
@@ -227,9 +269,12 @@ pub mod errors {
         NestedSTARError::ClientMeasurementMismatchError(original, received) => write!(f, "Clients sent differing measurement for identical share sets, original: {}, received: {}", original, received),
         NestedSTARError::LayerEncryptionKeysError(nkeys, nlayers) => write!(f, "Number of encryption keys ({}) provided for nested encryptions is not compatible with number of layers specified ({}).", nkeys, nlayers),
         NestedSTARError::NumMeasurementLayersError(current, expected) => write!(f, "Number of inferred measurement layers is {}, but expected is {}.", current, expected),
-        NestedSTARError::SerdeError => write!(f, "An error occurred during serialization/deserialization."),
+        NestedSTARError::SerdeJSONError => write!(f, "An error occurred during JSON serialization/deserialization."),
+        NestedSTARError::BincodeError => write!(f, "An error occurred during Bincode serialization/deserialization."),
         NestedSTARError::RandomnessSamplingError(err_string) => write!(f, "An error occurred during the sampling of randomness: {}.", err_string),
         NestedSTARError::MessageParseError => write!(f, "An error when attempting to parse the message."),
+        NestedSTARError::ProofMissing => write!(f, "Proof missing for randomness point."),
+        NestedSTARError::MissingVerificationParams => write!(f, "Verification key or proofs missing, must supply both or none.")
       }
     }
   }
