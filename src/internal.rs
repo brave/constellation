@@ -18,7 +18,7 @@ const NESTED_STAR_ENCRYPTION_LABEL: &str = "nested_star_layer_encrypt";
 
 /// The `NestedMeasurement` struct provides a mechanism for submitting
 /// measurements as vectors.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NestedMeasurement(pub Vec<SingleMeasurement>);
 impl NestedMeasurement {
   pub fn new(x_list: &[Vec<u8>]) -> Result<Self, NestedSTARError> {
@@ -88,7 +88,7 @@ impl From<Message> for SerializableMessage {
 /// layers of encrypted STAR messages that can be decrypted only if the
 /// previous message layer is decrypted and opened via the standard STAR
 /// recovery mechanism.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NestedMessage {
   pub epoch: u8,
   pub unencrypted_layer: Message,
