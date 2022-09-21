@@ -18,7 +18,7 @@ const NESTED_STAR_ENCRYPTION_LABEL: &str = "nested_star_layer_encrypt";
 
 /// The `NestedMeasurement` struct provides a mechanism for submitting
 /// measurements as vectors.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NestedMeasurement(pub Vec<SingleMeasurement>);
 impl NestedMeasurement {
   pub fn new(x_list: &[Vec<u8>]) -> Result<Self, NestedSTARError> {
@@ -88,7 +88,7 @@ impl From<Message> for SerializableMessage {
 /// layers of encrypted STAR messages that can be decrypted only if the
 /// previous message layer is decrypted and opened via the standard STAR
 /// recovery mechanism.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NestedMessage {
   pub epoch: u8,
   pub unencrypted_layer: Message,
@@ -617,7 +617,23 @@ mod tests {
   use insta::assert_snapshot;
   use sta_rs::share_recover;
 
-  const EXAMPLE_SHARE: &str = "CgAAAEAAAADCCH4ZhARNUDSJslRWE87ZG0NsgQfcH5flWkFNPmO5c3EOb/w/cTtzR4p6RPQgbR8lGjRfz6YGU3V/Bl0M43oLIAAAAFzChnIswE1u1zdSxAPmIekxbzqz6GqtjVK0g1NNFxxNIAAAAKmWDy+rBJcFElEnm8DNkIfi9k7S53iQxtuli/hUfZcsI832Xuq3l/KnUmJKjEa2T5VmLU5cRqfNgTpS77eOIA51qMtD+6dTBJM1VNq50xj+737l7/8B33mlFnLldj6QDA==";
+  /// Example sta_rs::Share value for testing
+  ///
+  /// The other Message fields are unchecked, but the share member
+  /// needs to parse properly to instantiate. A valid test value
+  /// can be generated as follows:
+  ///
+  /// ```
+  /// # let threshold = 2;
+  /// # let epoch = "t";
+  /// let measurement = sta_rs::SingleMeasurement::new("test example".as_bytes());
+  /// let mg = sta_rs::MessageGenerator::new(measurement, threshold, epoch);
+  /// let mut rnd = [0u8; sta_rs::DIGEST_LEN];
+  /// mg.sample_local_randomness(&mut rnd);
+  /// let message = sta_rs::Message::generate(&mg, &mut rnd, None);
+  /// println!("EXAMPLE_SHARE: {}", base64::encode(message.share.to_bytes()));
+  /// ```
+  const EXAMPLE_SHARE: &str = "AgAAADAAAAB+25XvcYCtiGJwR4X/U44ZAAAAAAAAAACHPKKY51k6Gja/gs5/R/RUAQAAAAAAAAAgAAAA4rynd5v1ane0FkR8aVvfDFwP+Y+mHhpZFWujfWErvvAgAAAAdasndZJ68kHipgIaudx6x9J0dzv9RSTuPprqAZOjk/2VTqVc+zQwXCNSCt9oUwZgA9M7ELpeyeYoaZHk6W0GbRaW7ptj73/Zrtg26acmwi1+EDb3ObNKNojcHuOQjAWY";
 
   #[test]
   fn construct_measurement() {
