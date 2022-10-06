@@ -250,6 +250,17 @@ impl PartialMeasurement {
   pub fn get_next_layer_key(&self) -> &Option<Vec<u8>> {
     &self.aux.key
   }
+
+  // A function for combining the next layer of partial measurement
+  // with the previous layer
+  fn combine_next_layer(&self, other: &PartialMeasurement) -> Self {
+    let mut pms = self.measurement.0.clone();
+    pms.extend(other.measurement.0.clone());
+    Self {
+      measurement: NestedMeasurement(pms),
+      aux: other.aux.clone(),
+    }
+  }
 }
 
 /// `FinalMeasurement` contains the measurement data output from a
@@ -281,6 +292,15 @@ impl From<&PartialMeasurement> for FinalMeasurement {
       measurement: pm_to_set,
       data: pm.aux.data.clone(),
     }
+  }
+}
+impl From<Vec<PartialMeasurement>> for FinalMeasurement {
+  fn from(pms: Vec<PartialMeasurement>) -> Self {
+    let pm = pms
+      .into_iter()
+      .reduce(|acc, r| acc.combine_next_layer(&r))
+      .unwrap();
+    FinalMeasurement::from(&pm)
   }
 }
 impl PartialEq for FinalMeasurement {
@@ -378,7 +398,7 @@ pub fn recover_partial_measurements(
 
   // The `measurements` variable will eventually hold the most fine-grained
   // partial measurement sent by each client
-  let mut measurements = vec![Ok(None); ident_nested_messages.len()];
+  let mut measurements = vec![vec![]; ident_nested_messages.len()];
 
   // refers to the layer that is currently being processed
   let mut layer_idx = 0;
@@ -411,7 +431,7 @@ pub fn recover_partial_measurements(
           Err(e) => {
             indices
               .iter()
-              .for_each(|&idx| measurements[idx] = Err(e.clone()));
+              .for_each(|&idx| measurements[idx].push(Err(e.clone())));
             continue;
           }
           Ok(k) => k,
@@ -422,7 +442,7 @@ pub fn recover_partial_measurements(
         if let Err(e) = res_pms {
           indices
             .iter()
-            .for_each(|&idx| measurements[idx] = Err(e.clone()));
+            .for_each(|&idx| measurements[idx].push(Err(e.clone())));
           continue;
         }
         let pms = res_pms.unwrap();
@@ -453,7 +473,7 @@ pub fn recover_partial_measurements(
         // set the current partial outputs
         (0..indices.len()).into_iter().for_each(|j| {
           let idx = indices[j];
-          measurements[idx] = Ok(Some(FinalMeasurement::from(&pms[j])));
+          measurements[idx].push(Ok(Some(pms[j].clone())));
         });
       }
     }
@@ -464,27 +484,39 @@ pub fn recover_partial_measurements(
   ident_nested_messages
     .into_iter()
     .zip(measurements.into_iter())
-    .map(|(ident_nested_msg, measurement)| match measurement {
-      Err(e) => Err(e),
-      Ok(msmt) => {
-        // The measurement is empty in cases where no layers are decrypted, so these should be ignored.
-        if msmt.is_none() {
-          return Ok(PartialRecoveredMessage {
-            measurement: None,
-            next_message: None,
-          });
+    .map(|(ident_nested_msg, pm)| {
+      let mut pr_measurements = vec![];
+      for x in pm.into_iter() {
+        if let Err(e) = x {
+          return Err(e);
+        }
+
+        let m = x.unwrap();
+        if m.is_none() {
+          break;
         }
 
         // When the measurement is recovered then we output it
-        let msg = match ident_nested_msg {
-          None => None,
-          Some(nm) => Some(nm.message),
-        };
-        Ok(PartialRecoveredMessage {
-          measurement: msmt,
-          next_message: msg,
-        })
+        pr_measurements.push(m.unwrap())
       }
+
+      // drop empty values
+      if pr_measurements.is_empty() {
+        return Ok(PartialRecoveredMessage {
+          measurement: None,
+          next_message: None,
+        });
+      }
+
+      let msg = match ident_nested_msg {
+        None => None,
+        Some(nm) => Some(nm.message),
+      };
+      let fm = FinalMeasurement::from(pr_measurements);
+      Ok(PartialRecoveredMessage {
+        measurement: Some(fm),
+        next_message: msg,
+      })
     })
     .collect()
 }
@@ -896,12 +928,15 @@ mod tests {
     if !revealed {
       assert!(output.is_none());
     } else {
+      let revealed_len = revealed_len.unwrap();
       let revealed_output = output.as_ref().unwrap();
-      assert_eq!(revealed_output.measurement.len(), 1);
-      assert_eq!(
-        revealed_output.get_partial_measurement_raw(0),
-        measurement.get_layer_as_bytes(revealed_len.unwrap() - 1)
-      );
+      assert_eq!(revealed_output.measurement.len(), revealed_len);
+      for j in 0..revealed_len {
+        assert_eq!(
+          revealed_output.get_partial_measurement_raw(j),
+          measurement.get_layer_as_bytes(j)
+        );
+      }
     }
   }
 
