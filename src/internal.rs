@@ -273,7 +273,7 @@ pub struct FinalMeasurement {
   data: Vec<u8>,
 }
 impl FinalMeasurement {
-  pub fn get_measurement_raw(&self) -> Vec<u8> {
+  pub fn get_measurement_raw(&self) -> Vec<Vec<u8>> {
     self.get_partial_measurement_raw(self.measurement.len() - 1)
   }
 
@@ -281,8 +281,12 @@ impl FinalMeasurement {
     &self.data
   }
 
-  fn get_partial_measurement_raw(&self, i: usize) -> Vec<u8> {
-    self.measurement.get_layer_as_bytes(i)
+  fn get_partial_measurement_raw(&self, i: usize) -> Vec<Vec<u8>> {
+    let mut v = Vec::with_capacity(i+1);
+    for j in 0..i+1 {
+      v.push(self.measurement.get_layer_as_bytes(j));
+    }
+    v
   }
 }
 impl From<&PartialMeasurement> for FinalMeasurement {
@@ -315,7 +319,7 @@ pub struct PartialRecoveredMessage {
   pub next_message: Option<NestedMessage>,
 }
 impl PartialRecoveredMessage {
-  pub fn get_measurement_raw(&self) -> Vec<u8> {
+  pub fn get_measurement_raw(&self) -> Vec<Vec<u8>> {
     match self.measurement.as_ref() {
       Some(m) => m.get_measurement_raw(),
       None => Vec::new(),
@@ -469,7 +473,7 @@ pub fn recover_partial_measurements(
             .into_iter()
             .for_each(|i| ident_nested_messages[indices[i]] = None);
         }
-
+        
         // set the current partial outputs
         (0..indices.len()).into_iter().for_each(|j| {
           let idx = indices[j];
@@ -931,10 +935,12 @@ mod tests {
       let revealed_len = revealed_len.unwrap();
       let revealed_output = output.as_ref().unwrap();
       assert_eq!(revealed_output.measurement.len(), revealed_len);
+      let mut chk = vec![];
       for j in 0..revealed_len {
+        chk.push(measurement.get_layer_as_bytes(j));
         assert_eq!(
           revealed_output.get_partial_measurement_raw(j),
-          measurement.get_layer_as_bytes(j)
+          chk
         );
       }
     }

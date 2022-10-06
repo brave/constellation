@@ -198,7 +198,7 @@ mod tests {
     let agg_res = server::aggregate(&[msg], threshold, epoch, 2);
     let outputs = agg_res.outputs();
     assert_eq!(outputs.len(), 1);
-    assert_eq!(outputs[0].value(), vec!["world"]);
+    assert_eq!(outputs[0].value(), vec!["hello", "world"]);
     assert_eq!(outputs[0].auxiliary_data(), vec![aux]);
     assert_eq!(agg_res.num_recovery_errors(), 0);
     assert_eq!(agg_res.num_serde_errors(), 0);
@@ -438,7 +438,7 @@ mod tests {
 
     // check outputs
     let outputs = agg_res.outputs();
-    assert_eq!(outputs.len(), 2);
+    assert_eq!(outputs.len(), 4);
     if incl_failures {
       assert_eq!(agg_res.num_recovery_errors(), threshold as usize);
       assert_eq!(agg_res.num_serde_errors(), 1);

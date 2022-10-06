@@ -132,10 +132,9 @@ impl OutputMeasurement {
 }
 impl From<PartialRecoveredMessage> for OutputMeasurement {
   fn from(prm: PartialRecoveredMessage) -> Self {
-    let s = String::from_utf8(prm.get_measurement_raw()).unwrap();
-    let value = String::from(s.trim_end_matches(char::from(0)));
+    let sv = prm.get_measurement_raw().into_iter().map(|x| String::from(String::from_utf8(x).unwrap().trim_end_matches(char::from(0)))).collect();
     Self {
-      value: vec![value],
+      value: sv,
       occurrences: 1,
       auxiliary_data: vec![prm.get_aux_data()],
       locked_nested_messages: match prm.next_message {
