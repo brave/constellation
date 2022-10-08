@@ -132,7 +132,17 @@ impl OutputMeasurement {
 }
 impl From<PartialRecoveredMessage> for OutputMeasurement {
   fn from(prm: PartialRecoveredMessage) -> Self {
-    let sv = prm.get_measurement_raw().into_iter().map(|x| String::from(String::from_utf8(x).unwrap().trim_end_matches(char::from(0)))).collect();
+    let sv = prm
+      .get_measurement_raw()
+      .into_iter()
+      .map(|x| {
+        String::from(
+          String::from_utf8(x)
+            .unwrap()
+            .trim_end_matches(char::from(0)),
+        )
+      })
+      .collect();
     Self {
       value: sv,
       occurrences: 1,

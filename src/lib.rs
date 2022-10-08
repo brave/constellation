@@ -142,8 +142,8 @@
 //! );
 //! let output = agg_res.outputs();
 //! assert_eq!(output.len(), 1);
-//! let revealed_output = output.iter().find(|v| v.value() == vec!["world"]).unwrap();
-//! assert_eq!(revealed_output.value(), vec!["world"]);
+//! let revealed_output = output.iter().find(|v| v.value() == vec!["hello", "world"]).unwrap();
+//! assert_eq!(revealed_output.value(), vec!["hello", "world"]);
 //! assert_eq!(revealed_output.occurrences(), 10);
 //! (0..10).into_iter().for_each(|i| {
 //!   assert_eq!(revealed_output.auxiliary_data()[i], vec![i as u8; 3]);

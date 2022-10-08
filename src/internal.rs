@@ -282,8 +282,8 @@ impl FinalMeasurement {
   }
 
   fn get_partial_measurement_raw(&self, i: usize) -> Vec<Vec<u8>> {
-    let mut v = Vec::with_capacity(i+1);
-    for j in 0..i+1 {
+    let mut v = Vec::with_capacity(i + 1);
+    for j in 0..i + 1 {
       v.push(self.measurement.get_layer_as_bytes(j));
     }
     v
@@ -473,7 +473,7 @@ pub fn recover_partial_measurements(
             .into_iter()
             .for_each(|i| ident_nested_messages[indices[i]] = None);
         }
-        
+
         // set the current partial outputs
         (0..indices.len()).into_iter().for_each(|j| {
           let idx = indices[j];
@@ -938,10 +938,7 @@ mod tests {
       let mut chk = vec![];
       for j in 0..revealed_len {
         chk.push(measurement.get_layer_as_bytes(j));
-        assert_eq!(
-          revealed_output.get_partial_measurement_raw(j),
-          chk
-        );
+        assert_eq!(revealed_output.get_partial_measurement_raw(j), chk);
       }
     }
   }
