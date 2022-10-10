@@ -1,4 +1,4 @@
-//! The `nested-sta-rs` crate defines the public API for the Nested STAR
+//! The `constellation` crate defines the public API for the Nested STAR
 //! aggregation mechanism: a modification of the original
 //! [STAR](https://github.com/brave-experiments/sta-rs) protocol to
 //! allow clients to submit ordered, granular data at the highest
@@ -24,12 +24,12 @@
 //! message format.
 //!
 //! ```
-//! # use nested_sta_rs::api::*;
-//! # use nested_sta_rs::randomness::*;
-//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
-//! # use nested_sta_rs::consts::*;
-//! # use nested_sta_rs::errors::*;
-//! # use nested_sta_rs::format::*;
+//! # use constellation::api::*;
+//! # use constellation::randomness::*;
+//! # use constellation::randomness::testing::{LocalFetcher as RandomnessFetcher};
+//! # use constellation::consts::*;
+//! # use constellation::errors::*;
+//! # use constellation::format::*;
 //! #
 //! let threshold = 10;
 //! let epoch = 0u8;
@@ -73,12 +73,12 @@
 //! client measurement.
 //!
 //! ```
-//! # use nested_sta_rs::api::*;
-//! # use nested_sta_rs::randomness::*;
-//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
-//! # use nested_sta_rs::consts::*;
-//! # use nested_sta_rs::errors::*;
-//! # use nested_sta_rs::format::*;
+//! # use constellation::api::*;
+//! # use constellation::randomness::*;
+//! # use constellation::randomness::testing::{LocalFetcher as RandomnessFetcher};
+//! # use constellation::consts::*;
+//! # use constellation::errors::*;
+//! # use constellation::format::*;
 //! #
 //! let threshold = 10;
 //! let epoch = 0u8;
@@ -157,12 +157,12 @@
 //! themselves stay hidden.
 //!
 //! ```
-//! # use nested_sta_rs::api::*;
-//! # use nested_sta_rs::randomness::*;
-//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
-//! # use nested_sta_rs::consts::*;
-//! # use nested_sta_rs::errors::*;
-//! # use nested_sta_rs::format::*;
+//! # use constellation::api::*;
+//! # use constellation::randomness::*;
+//! # use constellation::randomness::testing::{LocalFetcher as RandomnessFetcher};
+//! # use constellation::consts::*;
+//! # use constellation::errors::*;
+//! # use constellation::format::*;
 //! #
 //! let threshold = 10;
 //! let epoch = 0u8;

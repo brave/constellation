@@ -1,5 +1,5 @@
 [package]
-name = "nested-sta-rs"
+name = "constellation"
 version = "0.1.0"
 authors = ["Alex Davidson <coela@alxdavids.xyz>"]
 edition = "2018"
