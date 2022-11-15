@@ -632,10 +632,10 @@ mod tests {
   /// let mg = sta_rs::MessageGenerator::new(measurement, threshold, epoch);
   /// let mut rnd = [0u8; sta_rs::DIGEST_LEN];
   /// mg.sample_local_randomness(&mut rnd);
-  /// let message = sta_rs::Message::generate(&mg, &mut rnd, None);
+  /// let message = sta_rs::Message::generate(&mg, &mut rnd, None).unwrap();
   /// println!("EXAMPLE_SHARE: {}", base64::encode(message.share.to_bytes()));
   /// ```
-  const EXAMPLE_SHARE: &str = "AgAAADAAAAB+25XvcYCtiGJwR4X/U44ZAAAAAAAAAACHPKKY51k6Gja/gs5/R/RUAQAAAAAAAAAgAAAA4rynd5v1ane0FkR8aVvfDFwP+Y+mHhpZFWujfWErvvAgAAAAdasndZJ68kHipgIaudx6x9J0dzv9RSTuPprqAZOjk/2VTqVc+zQwXCNSCt9oUwZgA9M7ELpeyeYoaZHk6W0GbRaW7ptj73/Zrtg26acmwi1+EDb3ObNKNojcHuOQjAWY";
+  const EXAMPLE_SHARE: &str = "AgAAADAAAAAjbxRyzvFKynnzP/l2NQ8MAAAAAAAAAAAZBEVLkZXDJHvki6l75wXFAAAAAAAAAAAgAAAA4rynd5v1ane0FkR8aVvfDFwP+Y+mHhpZFWujfWErvvAgAAAAdasndZJ68kHipgIaudx6x9J0dzv9RSTuPprqAZOjk/2VTqVc+zQwXCNSCt9oUwZgA9M7ELpeyeYoaZHk6W0GbRaW7ptj73/Zrtg26acmwi1+EDb3ObNKNojcHuOQjAWY";
 
   #[test]
   fn construct_measurement() {
