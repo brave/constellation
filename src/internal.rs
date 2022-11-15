@@ -1004,7 +1004,7 @@ mod tests {
         add_data.data = vec![];
       }
       let serialized_aux = bincode::serialize(&add_data).unwrap();
-      assert_eq!(aux_check_bytes.len() as usize, serialized_aux.len());
+      assert_eq!(aux_check_bytes.len(), serialized_aux.len());
       assert_eq!(aux_check_bytes, serialized_aux);
       let add_data_unserialized: NestedAssociatedData =
         bincode::deserialize(&serialized_aux).unwrap();
