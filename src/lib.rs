@@ -255,6 +255,7 @@ pub mod errors {
     SerdeJSONError,
     BincodeError,
     RandomnessSamplingError(String),
+    MessageGenerationError(String),
     MessageParseError,
     ProofMissing,
     MissingVerificationParams,
@@ -272,6 +273,7 @@ pub mod errors {
         NestedSTARError::SerdeJSONError => write!(f, "An error occurred during JSON serialization/deserialization."),
         NestedSTARError::BincodeError => write!(f, "An error occurred during Bincode serialization/deserialization."),
         NestedSTARError::RandomnessSamplingError(err_string) => write!(f, "An error occurred during the sampling of randomness: {}.", err_string),
+        NestedSTARError::MessageGenerationError(err_string) => write!(f, "An error when attempting to generate the message: {}.", err_string),
         NestedSTARError::MessageParseError => write!(f, "An error when attempting to parse the message."),
         NestedSTARError::ProofMissing => write!(f, "Proof missing for randomness point."),
         NestedSTARError::MissingVerificationParams => write!(f, "Verification key or proofs missing, must supply both or none.")

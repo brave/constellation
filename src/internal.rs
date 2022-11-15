@@ -139,7 +139,9 @@ impl NestedMessage {
       ));
 
       // generate message
-      let message = Message::generate(mg, rnd, message_aux);
+      let message = Message::generate(mg, rnd, message_aux).map_err(|msg| {
+        NestedSTARError::MessageGenerationError(msg.to_string())
+      })?;
 
       // encrypt ith layer with (i-1)th key (except for first
       // layer)
