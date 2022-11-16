@@ -26,12 +26,12 @@
 //! Constellation format.
 //!
 //! ```
-//! # use nested_sta_rs::api::*;
-//! # use nested_sta_rs::randomness::*;
-//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
-//! # use nested_sta_rs::consts::*;
-//! # use nested_sta_rs::errors::*;
-//! # use nested_sta_rs::format::*;
+//! # use star_constellation::api::*;
+//! # use star_constellation::randomness::*;
+//! # use star_constellation::randomness::testing::{LocalFetcher as RandomnessFetcher};
+//! # use star_constellation::consts::*;
+//! # use star_constellation::errors::*;
+//! # use star_constellation::format::*;
 //! #
 //! let threshold = 10;
 //! let epoch = 0u8;
@@ -75,12 +75,12 @@
 //! client measurement.
 //!
 //! ```
-//! # use nested_sta_rs::api::*;
-//! # use nested_sta_rs::randomness::*;
-//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
-//! # use nested_sta_rs::consts::*;
-//! # use nested_sta_rs::errors::*;
-//! # use nested_sta_rs::format::*;
+//! # use star_constellation::api::*;
+//! # use star_constellation::randomness::*;
+//! # use star_constellation::randomness::testing::{LocalFetcher as RandomnessFetcher};
+//! # use star_constellation::consts::*;
+//! # use star_constellation::errors::*;
+//! # use star_constellation::format::*;
 //! #
 //! let threshold = 10;
 //! let epoch = 0u8;
@@ -159,12 +159,12 @@
 //! themselves stay hidden.
 //!
 //! ```
-//! # use nested_sta_rs::api::*;
-//! # use nested_sta_rs::randomness::*;
-//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
-//! # use nested_sta_rs::consts::*;
-//! # use nested_sta_rs::errors::*;
-//! # use nested_sta_rs::format::*;
+//! # use star_constellation::api::*;
+//! # use star_constellation::randomness::*;
+//! # use star_constellation::randomness::testing::{LocalFetcher as RandomnessFetcher};
+//! # use star_constellation::consts::*;
+//! # use star_constellation::errors::*;
+//! # use star_constellation::format::*;
 //! #
 //! let threshold = 10;
 //! let epoch = 0u8;
