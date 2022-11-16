@@ -1,3 +1,4 @@
+//! Define interations with the randomness server OPRF
 use crate::consts::RANDOMNESS_LEN;
 use crate::errors::NestedSTARError;
 use crate::format::RandomnessSampling;

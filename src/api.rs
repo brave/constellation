@@ -1,15 +1,19 @@
-// The `api` module consists of the client- and server-specific functions for producing
-// messages and aggregating them, respectively.
+//! The `api` module consists of the client- and server-specific
+//! functions for producing and aggregating messages, respectively.
+
 pub use crate::internal::{key_recover, recover};
 pub use crate::internal::{
   NestedMessage, PartialMeasurement, SerializableNestedMessage,
 };
+
+/// Oblivious pseudo-random function used to make submissions
+/// unpredictable.
 pub use ppoprf;
 
 pub mod client {
   //! The client module wraps all API functions used by clients for
   //! constructing their aggregation messages relative to the
-  //! NestedSTAR aggregation protocol.
+  //! Constellation aggregation protocol.
   //!
   //! The default implementations of each of the functions can be used
   //! for running an example Client. Each of these functions can be
@@ -101,7 +105,7 @@ pub mod client {
 
 pub mod server {
   //! The server module wraps all public API functions used by the
-  //! aggregation server
+  //! aggregation server.
   use crate::format::*;
   use crate::internal::recover_partial_measurements;
   use crate::internal::{NestedMessage, SerializableNestedMessage};
@@ -109,10 +113,9 @@ pub mod server {
   use std::collections::HashMap;
 
   /// The `aggregate` function is a public API function that takes
-  /// a list of serialized Nested STAR messages as input (along
+  /// a list of serialized Constellation messages as input (along
   /// with standard STAR parameters) and outputs a vector of output
-  /// measurements using the Nested STAR recovery
-  /// mechanism.
+  /// measurements using the Constellation recovery mechanism.
   ///
   /// The output measurements include the number of occurrences
   /// that were recorded, along with attached auxiliary data

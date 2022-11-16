@@ -1,3 +1,4 @@
+//! Define various stages in message generation and formatting
 use serde::{Deserialize, Serialize};
 
 use crate::consts::*;
@@ -7,13 +8,14 @@ use crate::internal::{
 };
 use sta_rs::SingleMeasurement;
 
-// Serialized format that includes the result of `NestedMeasurement` and
-// is compatible with randomness server interactions
+/// Serializes a `NestedMeasurement` together with a ppoprf epoch
+/// in a format compatible with randomness server interactions.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct RandomnessSampling {
   input: Vec<Vec<u8>>,
   epoch: u8,
 }
+
 impl RandomnessSampling {
   pub fn new(nm: &NestedMeasurement, epoch: u8) -> Self {
     Self {
@@ -49,8 +51,8 @@ impl From<&RandomnessSampling> for NestedMeasurement {
   }
 }
 
-// Serialized format of `NestedMeasurement` that is compatible with
-// randomness server interactions
+/// Holds a `RandomnessSampling` together with a randomness server
+/// response, used to construct the final encoded message.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MessageGeneration {
   input: Vec<Vec<u8>>,

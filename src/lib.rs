@@ -1,15 +1,17 @@
-//! The `nested-sta-rs` crate defines the public API for the Nested STAR
+//! The `star-constellation` crate implements the Constellation
 //! aggregation mechanism: a modification of the original
-//! [STAR](https://github.com/brave-experiments/sta-rs) protocol to
-//! allow clients to submit ordered, granular data at the highest
-//! resolution that is possible, whilst maintaining k-anonymity.
-//! Therefore, Nested STAR provides both higher utility for data
-//! aggregation (revealing partial measurements where possible), and
-//! better privacy for fine-grained and unique client datapoints.
+//! [STAR](https://github.com/brave/sta-rs) protocol to allow
+//! clients to submit ordered, granular data at the highest
+//! resolution that is possible, whilst maintaining crowd-based
+//! anonymity.
+//!
+//! Constellation provides both higher utility for data aggregation
+//! than STAR alone (revealing partial measurements where possible),
+//! and better privacy for fine-grained client data.
 //!
 //! ## Background
 //!
-//! Specifically, Nested STAR 'nests' or 'layers' an ordered vector of
+//! Specifically, Constellation 'nests' or 'layers' an ordered vector of
 //! measurements into associated STAR messages, such that each message
 //! can only be accessed if the STAR message at the previous layer was
 //! included in a successful recovery. The privacy of unrevealed layers
@@ -20,8 +22,8 @@
 //!
 //! ### Client
 //!
-//! The Client produces an aggregation message using the Nested STAR
-//! message format.
+//! The Client produces a message for threshold aggregation using the
+//! Constellation format.
 //!
 //! ```
 //! # use nested_sta_rs::api::*;
