@@ -2,10 +2,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::consts::*;
-use crate::errors::NestedSTARError;
 use crate::internal::{
   NestedMeasurement, NestedMessage, PartialRecoveredMessage,
 };
+use crate::Error;
 use sta_rs::SingleMeasurement;
 
 /// Serializes a `NestedMeasurement` together with a ppoprf epoch
@@ -63,9 +63,9 @@ impl MessageGeneration {
   pub fn new(
     rsf: RandomnessSampling,
     input_rand: Vec<[u8; RANDOMNESS_LEN]>,
-  ) -> Result<Self, NestedSTARError> {
+  ) -> Result<Self, Error> {
     if rsf.input_len() != input_rand.len() {
-      return Err(NestedSTARError::NumMeasurementLayersError(
+      return Err(Error::NumMeasurementLayers(
         rsf.input_len(),
         input_rand.len(),
       ));

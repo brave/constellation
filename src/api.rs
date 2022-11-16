@@ -18,7 +18,6 @@ pub mod client {
   //! The default implementations of each of the functions can be used
   //! for running an example Client. Each of these functions can be
   //! swapped out for alternative implementations.
-  use crate::errors::NestedSTARError;
   use crate::format::*;
   use crate::internal::sample_layer_enc_keys;
   use crate::internal::NestedMeasurement;
@@ -26,6 +25,7 @@ pub mod client {
   use crate::randomness::{
     process_randomness_response, RequestState as RandomnessRequestState,
   };
+  use crate::Error;
   use ppoprf::ppoprf;
 
   /// The function `prepare_measurement` takes a vector of measurement
@@ -36,7 +36,7 @@ pub mod client {
   pub fn prepare_measurement(
     measurement: &[Vec<u8>],
     epoch: u8,
-  ) -> Result<RandomnessRequestState, NestedSTARError> {
+  ) -> Result<RandomnessRequestState, Error> {
     let nm = NestedMeasurement::new(measurement)?;
     let rsf = RandomnessSampling::new(&nm, epoch);
     Ok(RandomnessRequestState::new(rsf))
@@ -73,11 +73,11 @@ pub mod client {
     verification_key: &Option<ppoprf::ServerPublicKey>,
     aux_bytes: &[u8],
     threshold: u32,
-  ) -> Result<Vec<u8>, NestedSTARError> {
+  ) -> Result<Vec<u8>, Error> {
     if (randomness_proofs.is_some() && verification_key.is_none())
       || (randomness_proofs.is_none() && verification_key.is_some())
     {
-      return Err(NestedSTARError::MissingVerificationParams);
+      return Err(Error::MissingVerificationParams);
     }
     let parsed_response = process_randomness_response(
       rrs.blinded_points(),
@@ -99,7 +99,7 @@ pub mod client {
       aux_bytes,
       mgf.epoch(),
     )?);
-    bincode::serialize(&snm).map_err(|_| NestedSTARError::BincodeError)
+    bincode::serialize(&snm).map_err(|e| Error::Serialization(e.to_string()))
   }
 }
 

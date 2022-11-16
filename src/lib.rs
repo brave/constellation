@@ -30,7 +30,6 @@
 //! # use star_constellation::randomness::*;
 //! # use star_constellation::randomness::testing::{LocalFetcher as RandomnessFetcher};
 //! # use star_constellation::consts::*;
-//! # use star_constellation::errors::*;
 //! # use star_constellation::format::*;
 //! #
 //! let threshold = 10;
@@ -79,7 +78,6 @@
 //! # use star_constellation::randomness::*;
 //! # use star_constellation::randomness::testing::{LocalFetcher as RandomnessFetcher};
 //! # use star_constellation::consts::*;
-//! # use star_constellation::errors::*;
 //! # use star_constellation::format::*;
 //! #
 //! let threshold = 10;
@@ -163,7 +161,6 @@
 //! # use star_constellation::randomness::*;
 //! # use star_constellation::randomness::testing::{LocalFetcher as RandomnessFetcher};
 //! # use star_constellation::consts::*;
-//! # use star_constellation::errors::*;
 //! # use star_constellation::format::*;
 //! #
 //! let threshold = 10;
@@ -245,41 +242,35 @@ pub mod consts {
   pub const RANDOMNESS_LEN: usize = 32;
 }
 
-pub mod errors {
-  use std::fmt;
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Error {
+  ShareRecovery,
+  ClientMeasurementMismatch(String, String),
+  LayerEncryptionKeys(usize, usize),
+  NumMeasurementLayers(usize, usize),
+  Serialization(String),
+  RandomnessSampling(String),
+  MessageGeneration(String),
+  MessageParse,
+  ProofMissing,
+  MissingVerificationParams,
+}
 
-  #[derive(Debug, Clone, Eq, PartialEq)]
-  pub enum NestedSTARError {
-    ShareRecoveryFailedError,
-    ClientMeasurementMismatchError(String, String),
-    LayerEncryptionKeysError(usize, usize),
-    NumMeasurementLayersError(usize, usize),
-    SerdeJSONError,
-    BincodeError,
-    RandomnessSamplingError(String),
-    MessageGenerationError(String),
-    MessageParseError,
-    ProofMissing,
-    MissingVerificationParams,
-  }
+impl std::error::Error for Error {}
 
-  impl std::error::Error for NestedSTARError {}
-
-  impl fmt::Display for NestedSTARError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-      match self {
-        NestedSTARError::ShareRecoveryFailedError => write!(f, "Internal share recovery failed"),
-        NestedSTARError::ClientMeasurementMismatchError(original, received) => write!(f, "Clients sent differing measurement for identical share sets, original: {}, received: {}", original, received),
-        NestedSTARError::LayerEncryptionKeysError(nkeys, nlayers) => write!(f, "Number of encryption keys ({}) provided for nested encryptions is not compatible with number of layers specified ({}).", nkeys, nlayers),
-        NestedSTARError::NumMeasurementLayersError(current, expected) => write!(f, "Number of inferred measurement layers is {}, but expected is {}.", current, expected),
-        NestedSTARError::SerdeJSONError => write!(f, "An error occurred during JSON serialization/deserialization."),
-        NestedSTARError::BincodeError => write!(f, "An error occurred during Bincode serialization/deserialization."),
-        NestedSTARError::RandomnessSamplingError(err_string) => write!(f, "An error occurred during the sampling of randomness: {}.", err_string),
-        NestedSTARError::MessageGenerationError(err_string) => write!(f, "An error when attempting to generate the message: {}.", err_string),
-        NestedSTARError::MessageParseError => write!(f, "An error when attempting to parse the message."),
-        NestedSTARError::ProofMissing => write!(f, "Proof missing for randomness point."),
-        NestedSTARError::MissingVerificationParams => write!(f, "Verification key or proofs missing, must supply both or none.")
-      }
+impl std::fmt::Display for Error {
+  fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    match self {
+      Self::ShareRecovery => write!(f, "Internal share recovery failed"),
+      Self::ClientMeasurementMismatch(original, received) => write!(f, "Clients sent differing measurement for identical share sets, original: {}, received: {}", original, received),
+      Self::LayerEncryptionKeys(nkeys, nlayers) => write!(f, "Number of encryption keys ({}) provided for nested encryptions is not compatible with number of layers specified ({}).", nkeys, nlayers),
+      Self::NumMeasurementLayers(current, expected) => write!(f, "Number of inferred measurement layers is {}, but expected is {}.", current, expected),
+      Self::Serialization(err_string) => write!(f, "An error occurred during serialization/deserialization: {}.", err_string),
+      Self::RandomnessSampling(err_string) => write!(f, "An error occurred during the sampling of randomness: {}.", err_string),
+      Self::MessageGeneration(err_string) => write!(f, "An error when attempting to generate the message: {}.", err_string),
+      Self::MessageParse => write!(f, "An error when attempting to parse the message."),
+      Self::ProofMissing => write!(f, "Proof missing for randomness point."),
+      Self::MissingVerificationParams => write!(f, "Verification key or proofs missing, must supply both or none.")
     }
   }
 }
