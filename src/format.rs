@@ -1,19 +1,21 @@
+//! Define various stages in message generation and formatting
 use serde::{Deserialize, Serialize};
 
 use crate::consts::*;
-use crate::errors::NestedSTARError;
 use crate::internal::{
   NestedMeasurement, NestedMessage, PartialRecoveredMessage,
 };
+use crate::Error;
 use sta_rs::SingleMeasurement;
 
-// Serialized format that includes the result of `NestedMeasurement` and
-// is compatible with randomness server interactions
+/// Serializes a `NestedMeasurement` together with a ppoprf epoch
+/// in a format compatible with randomness server interactions.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct RandomnessSampling {
   input: Vec<Vec<u8>>,
   epoch: u8,
 }
+
 impl RandomnessSampling {
   pub fn new(nm: &NestedMeasurement, epoch: u8) -> Self {
     Self {
@@ -49,8 +51,8 @@ impl From<&RandomnessSampling> for NestedMeasurement {
   }
 }
 
-// Serialized format of `NestedMeasurement` that is compatible with
-// randomness server interactions
+/// Holds a `RandomnessSampling` together with a randomness server
+/// response, used to construct the final encoded message.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct MessageGeneration {
   input: Vec<Vec<u8>>,
@@ -61,9 +63,9 @@ impl MessageGeneration {
   pub fn new(
     rsf: RandomnessSampling,
     input_rand: Vec<[u8; RANDOMNESS_LEN]>,
-  ) -> Result<Self, NestedSTARError> {
+  ) -> Result<Self, Error> {
     if rsf.input_len() != input_rand.len() {
-      return Err(NestedSTARError::NumMeasurementLayersError(
+      return Err(Error::NumMeasurementLayers(
         rsf.input_len(),
         input_rand.len(),
       ));

@@ -10,7 +10,7 @@ use sta_rs::{
 use rand_core::{OsRng, RngCore};
 
 use crate::consts::*;
-use crate::errors::NestedSTARError;
+use crate::Error;
 
 // Internal consts
 const LAYER_ENC_KEY_LEN: usize = 16;
@@ -21,7 +21,7 @@ const NESTED_STAR_ENCRYPTION_LABEL: &str = "nested_star_layer_encrypt";
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NestedMeasurement(pub Vec<SingleMeasurement>);
 impl NestedMeasurement {
-  pub fn new(x_list: &[Vec<u8>]) -> Result<Self, NestedSTARError> {
+  pub fn new(x_list: &[Vec<u8>]) -> Result<Self, Error> {
     let mut measurements = Vec::with_capacity(x_list.len());
     // create partial measurements
     for x in x_list {
@@ -101,17 +101,11 @@ impl NestedMessage {
     keys: &[Vec<u8>],
     aux_data: &[u8],
     epoch: u8,
-  ) -> Result<Self, NestedSTARError> {
+  ) -> Result<Self, Error> {
     if gens.len() - 1 != keys.len() {
-      return Err(NestedSTARError::LayerEncryptionKeysError(
-        keys.len(),
-        gens.len() - 1,
-      ));
+      return Err(Error::LayerEncryptionKeys(keys.len(), gens.len() - 1));
     } else if rand_bytes.len() != gens.len() {
-      return Err(NestedSTARError::NumMeasurementLayersError(
-        gens.len(),
-        rand_bytes.len(),
-      ));
+      return Err(Error::NumMeasurementLayers(gens.len(), rand_bytes.len()));
     }
 
     let mut unencrypted_layer: Option<Message> = None;
@@ -139,9 +133,8 @@ impl NestedMessage {
       ));
 
       // generate message
-      let message = Message::generate(mg, rnd, message_aux).map_err(|msg| {
-        NestedSTARError::MessageGenerationError(msg.to_string())
-      })?;
+      let message = Message::generate(mg, rnd, message_aux)
+        .map_err(|msg| Error::MessageGeneration(msg.to_string()))?;
 
       // encrypt ith layer with (i-1)th key (except for first
       // layer)
@@ -361,7 +354,7 @@ pub fn recover_partial_measurements(
   epoch: u8,
   threshold: u32,
   num_layers: usize,
-) -> Vec<Result<PartialRecoveredMessage, NestedSTARError>> {
+) -> Vec<Result<PartialRecoveredMessage, Error>> {
   // Identify each message with a long-term identifier
   let mut ident_nested_messages = Vec::new();
   for (i, nm) in nested_messages.iter().enumerate() {
@@ -507,35 +500,36 @@ pub fn sample_layer_enc_keys(num_layers: usize) -> Vec<Vec<u8>> {
 pub fn recover(
   subset: &[&Message],
   key: &[u8],
-) -> Result<Vec<PartialMeasurement>, NestedSTARError> {
+) -> Result<Vec<PartialMeasurement>, Error> {
   let ciphertexts = subset.iter().map(|t| t.ciphertext.clone());
   let plaintexts = ciphertexts.map(|c| c.decrypt(key, "star_encrypt"));
 
-  let splits: Vec<Result<(Vec<u8>, NestedAssociatedData), NestedSTARError>> =
-    plaintexts
-      .map(|slice| {
-        // parse all measurement bytes
-        if let Some(buf) = load_bytes(&slice) {
-          // parse remaining bytes of auxiliary data
-          let rem = &slice[4 + buf.len()..];
-          if let Some(aux_bytes) = load_bytes(rem) {
-            let measurement_bytes = buf.to_vec();
-            if let Ok(aux) = bincode::deserialize(aux_bytes) {
-              return Ok((measurement_bytes, aux));
-            } else {
-              return Err(NestedSTARError::BincodeError);
-            }
+  let splits: Vec<Result<(Vec<u8>, NestedAssociatedData), Error>> = plaintexts
+    .map(|slice| {
+      // parse all measurement bytes
+      if let Some(buf) = load_bytes(&slice) {
+        // parse remaining bytes of auxiliary data
+        let rem = &slice[4 + buf.len()..];
+        if let Some(aux_bytes) = load_bytes(rem) {
+          let measurement_bytes = buf.to_vec();
+          if let Ok(aux) = bincode::deserialize(aux_bytes) {
+            return Ok((measurement_bytes, aux));
+          } else {
+            return Err(Error::Serialization(
+              "bincode::deserialize failed recovering aux data".to_string(),
+            ));
           }
         }
-        Err(NestedSTARError::MessageParseError)
-      })
-      .collect();
+      }
+      Err(Error::MessageParse)
+    })
+    .collect();
 
   // we also ensure that no message parsing errors occurred, we should
   // recover with only a threshold number of messages, so any error that
   // occurs should be fatal for recovery
   if splits.iter().any(|x| x.is_err()) {
-    return Err(NestedSTARError::MessageParseError);
+    return Err(Error::MessageParse);
   }
 
   // check that decrypted measurements all have the same value.
@@ -544,7 +538,7 @@ pub fn recover(
   for to_chk in splits.iter().skip(1) {
     let measurement_to_chk = &to_chk.as_ref().unwrap().0;
     if measurement_to_chk != measurement {
-      return Err(NestedSTARError::ClientMeasurementMismatchError(
+      return Err(Error::ClientMeasurementMismatch(
         serde_json::to_string(measurement).unwrap(),
         serde_json::to_string(&measurement_to_chk).unwrap(),
       ));
@@ -571,15 +565,12 @@ pub fn recover(
 }
 
 /// Runs the standard STAR key recovery mechanism
-pub fn key_recover(
-  layer: &[&Message],
-  epoch: u8,
-) -> Result<Vec<u8>, NestedSTARError> {
+pub fn key_recover(layer: &[&Message], epoch: u8) -> Result<Vec<u8>, Error> {
   let mut result = vec![0u8; LAYER_ENC_KEY_LEN];
   let shares: Vec<Share> = layer.iter().map(|m| m.share.clone()).collect();
   let res = share_recover(&shares);
   if res.is_err() {
-    return Err(NestedSTARError::ShareRecoveryFailedError);
+    return Err(Error::ShareRecovery);
   }
   let message = res.unwrap().get_message();
   derive_ske_key(&message, &[epoch], &mut result);
@@ -656,10 +647,7 @@ mod tests {
     let rand = sample_randomness(&mgs);
     let nmsg = NestedMessage::new(&mgs, &rand, &keys, &[], epoch);
     assert!(nmsg.is_err());
-    assert_eq!(
-      nmsg,
-      Err(NestedSTARError::LayerEncryptionKeysError(keys.len(), 2))
-    );
+    assert_eq!(nmsg, Err(Error::LayerEncryptionKeys(keys.len(), 2)));
   }
 
   #[test]
@@ -674,10 +662,7 @@ mod tests {
     assert!(nmsg.is_err());
     assert_eq!(
       nmsg,
-      Err(NestedSTARError::NumMeasurementLayersError(
-        mgs.len(),
-        rand.len()
-      ))
+      Err(Error::NumMeasurementLayers(mgs.len(), rand.len()))
     );
   }
 

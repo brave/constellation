@@ -1,23 +1,24 @@
+//! Define interations with the randomness server OPRF
 use crate::consts::RANDOMNESS_LEN;
-use crate::errors::NestedSTARError;
 use crate::format::RandomnessSampling;
+use crate::Error;
 use ppoprf::ppoprf;
 
 pub fn process_randomness_response(
   points: &[ppoprf::Point],
   resp_points: &[&[u8]],
   resp_proofs: Option<&[&[u8]]>,
-) -> Result<Vec<ppoprf::Evaluation>, NestedSTARError> {
+) -> Result<Vec<ppoprf::Evaluation>, Error> {
   let results = resp_points
     .iter()
     .enumerate()
     .map(|(i, v)| {
       let proof = match resp_proofs {
         Some(proofs) => {
-          let data = proofs.get(i).ok_or(NestedSTARError::ProofMissing)?;
+          let data = proofs.get(i).ok_or(Error::ProofMissing)?;
           Some(
             ppoprf::ProofDLEQ::load_from_bincode(data)
-              .map_err(|_| NestedSTARError::BincodeError)?,
+              .map_err(|e| Error::Serialization(e.to_string()))?,
           )
         }
         None => None,
@@ -27,9 +28,9 @@ pub fn process_randomness_response(
         proof,
       })
     })
-    .collect::<Result<Vec<ppoprf::Evaluation>, NestedSTARError>>()?;
+    .collect::<Result<Vec<ppoprf::Evaluation>, Error>>()?;
   if resp_points.len() != points.len() {
-    return Err(NestedSTARError::RandomnessSamplingError(format!(
+    return Err(Error::RandomnessSampling(format!(
       "Server returned {} results, but expected {}.",
       resp_points.len(),
       points.len(),
@@ -68,7 +69,7 @@ impl RequestState {
     &self,
     results: &[ppoprf::Evaluation],
     public_key: &Option<ppoprf::ServerPublicKey>,
-  ) -> Result<Vec<[u8; RANDOMNESS_LEN]>, NestedSTARError> {
+  ) -> Result<Vec<[u8; RANDOMNESS_LEN]>, Error> {
     let mut buf = [0u8; RANDOMNESS_LEN];
     let mut rand_out = Vec::with_capacity(results.len());
     for (i, result) in results.iter().enumerate() {
@@ -80,7 +81,7 @@ impl RequestState {
         if result.proof.is_some()
           && !ppoprf::Client::verify(pk, blinded_point, result, self.epoch())
         {
-          return Err(NestedSTARError::RandomnessSamplingError(
+          return Err(Error::RandomnessSampling(
             "Client ZK proof verification failed".into(),
           ));
         }
@@ -160,15 +161,13 @@ pub mod testing {
       &self,
       serialized_points: &[&[u8]],
       epoch: u8,
-    ) -> Result<LocalFetcherResponse, NestedSTARError> {
+    ) -> Result<LocalFetcherResponse, Error> {
       // Create a mock response based on expected PPOPRF functionality
       let mut result: LocalFetcherResponse = Default::default();
       for serialized_point in serialized_points.iter() {
         let point = ppoprf::Point::from(*serialized_point);
         match self.ppoprf_server.eval(&point, epoch, true) {
-          Err(e) => {
-            return Err(NestedSTARError::RandomnessSamplingError(e.to_string()))
-          }
+          Err(e) => return Err(Error::RandomnessSampling(e.to_string())),
           Ok(eval) => {
             result
               .serialized_points
@@ -178,7 +177,7 @@ pub mod testing {
                 .proof
                 .unwrap()
                 .serialize_to_bincode()
-                .map_err(|_| NestedSTARError::BincodeError)?,
+                .map_err(|e| Error::Serialization(e.to_string()))?,
             );
           }
         };

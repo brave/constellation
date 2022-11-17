@@ -1,15 +1,17 @@
-//! The `nested-sta-rs` crate defines the public API for the Nested STAR
+//! The `star-constellation` crate implements the Constellation
 //! aggregation mechanism: a modification of the original
-//! [STAR](https://github.com/brave-experiments/sta-rs) protocol to
-//! allow clients to submit ordered, granular data at the highest
-//! resolution that is possible, whilst maintaining k-anonymity.
-//! Therefore, Nested STAR provides both higher utility for data
-//! aggregation (revealing partial measurements where possible), and
-//! better privacy for fine-grained and unique client datapoints.
+//! [STAR](https://github.com/brave/sta-rs) protocol to allow
+//! clients to submit ordered, granular data at the highest
+//! resolution that is possible, whilst maintaining crowd-based
+//! anonymity.
+//!
+//! Constellation provides both higher utility for data aggregation
+//! than STAR alone (revealing partial measurements where possible),
+//! and better privacy for fine-grained client data.
 //!
 //! ## Background
 //!
-//! Specifically, Nested STAR 'nests' or 'layers' an ordered vector of
+//! Specifically, Constellation 'nests' or 'layers' an ordered vector of
 //! measurements into associated STAR messages, such that each message
 //! can only be accessed if the STAR message at the previous layer was
 //! included in a successful recovery. The privacy of unrevealed layers
@@ -20,16 +22,15 @@
 //!
 //! ### Client
 //!
-//! The Client produces an aggregation message using the Nested STAR
-//! message format.
+//! The Client produces a message for threshold aggregation using the
+//! Constellation format.
 //!
 //! ```
-//! # use nested_sta_rs::api::*;
-//! # use nested_sta_rs::randomness::*;
-//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
-//! # use nested_sta_rs::consts::*;
-//! # use nested_sta_rs::errors::*;
-//! # use nested_sta_rs::format::*;
+//! # use star_constellation::api::*;
+//! # use star_constellation::randomness::*;
+//! # use star_constellation::randomness::testing::{LocalFetcher as RandomnessFetcher};
+//! # use star_constellation::consts::*;
+//! # use star_constellation::format::*;
 //! #
 //! let threshold = 10;
 //! let epoch = 0u8;
@@ -73,12 +74,11 @@
 //! client measurement.
 //!
 //! ```
-//! # use nested_sta_rs::api::*;
-//! # use nested_sta_rs::randomness::*;
-//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
-//! # use nested_sta_rs::consts::*;
-//! # use nested_sta_rs::errors::*;
-//! # use nested_sta_rs::format::*;
+//! # use star_constellation::api::*;
+//! # use star_constellation::randomness::*;
+//! # use star_constellation::randomness::testing::{LocalFetcher as RandomnessFetcher};
+//! # use star_constellation::consts::*;
+//! # use star_constellation::format::*;
 //! #
 //! let threshold = 10;
 //! let epoch = 0u8;
@@ -157,12 +157,11 @@
 //! themselves stay hidden.
 //!
 //! ```
-//! # use nested_sta_rs::api::*;
-//! # use nested_sta_rs::randomness::*;
-//! # use nested_sta_rs::randomness::testing::{LocalFetcher as RandomnessFetcher};
-//! # use nested_sta_rs::consts::*;
-//! # use nested_sta_rs::errors::*;
-//! # use nested_sta_rs::format::*;
+//! # use star_constellation::api::*;
+//! # use star_constellation::randomness::*;
+//! # use star_constellation::randomness::testing::{LocalFetcher as RandomnessFetcher};
+//! # use star_constellation::consts::*;
+//! # use star_constellation::format::*;
 //! #
 //! let threshold = 10;
 //! let epoch = 0u8;
@@ -243,41 +242,35 @@ pub mod consts {
   pub const RANDOMNESS_LEN: usize = 32;
 }
 
-pub mod errors {
-  use std::fmt;
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Error {
+  ShareRecovery,
+  ClientMeasurementMismatch(String, String),
+  LayerEncryptionKeys(usize, usize),
+  NumMeasurementLayers(usize, usize),
+  Serialization(String),
+  RandomnessSampling(String),
+  MessageGeneration(String),
+  MessageParse,
+  ProofMissing,
+  MissingVerificationParams,
+}
 
-  #[derive(Debug, Clone, Eq, PartialEq)]
-  pub enum NestedSTARError {
-    ShareRecoveryFailedError,
-    ClientMeasurementMismatchError(String, String),
-    LayerEncryptionKeysError(usize, usize),
-    NumMeasurementLayersError(usize, usize),
-    SerdeJSONError,
-    BincodeError,
-    RandomnessSamplingError(String),
-    MessageGenerationError(String),
-    MessageParseError,
-    ProofMissing,
-    MissingVerificationParams,
-  }
+impl std::error::Error for Error {}
 
-  impl std::error::Error for NestedSTARError {}
-
-  impl fmt::Display for NestedSTARError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-      match self {
-        NestedSTARError::ShareRecoveryFailedError => write!(f, "Internal share recovery failed"),
-        NestedSTARError::ClientMeasurementMismatchError(original, received) => write!(f, "Clients sent differing measurement for identical share sets, original: {}, received: {}", original, received),
-        NestedSTARError::LayerEncryptionKeysError(nkeys, nlayers) => write!(f, "Number of encryption keys ({}) provided for nested encryptions is not compatible with number of layers specified ({}).", nkeys, nlayers),
-        NestedSTARError::NumMeasurementLayersError(current, expected) => write!(f, "Number of inferred measurement layers is {}, but expected is {}.", current, expected),
-        NestedSTARError::SerdeJSONError => write!(f, "An error occurred during JSON serialization/deserialization."),
-        NestedSTARError::BincodeError => write!(f, "An error occurred during Bincode serialization/deserialization."),
-        NestedSTARError::RandomnessSamplingError(err_string) => write!(f, "An error occurred during the sampling of randomness: {}.", err_string),
-        NestedSTARError::MessageGenerationError(err_string) => write!(f, "An error when attempting to generate the message: {}.", err_string),
-        NestedSTARError::MessageParseError => write!(f, "An error when attempting to parse the message."),
-        NestedSTARError::ProofMissing => write!(f, "Proof missing for randomness point."),
-        NestedSTARError::MissingVerificationParams => write!(f, "Verification key or proofs missing, must supply both or none.")
-      }
+impl std::fmt::Display for Error {
+  fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    match self {
+      Self::ShareRecovery => write!(f, "Internal share recovery failed"),
+      Self::ClientMeasurementMismatch(original, received) => write!(f, "Clients sent differing measurement for identical share sets, original: {}, received: {}", original, received),
+      Self::LayerEncryptionKeys(nkeys, nlayers) => write!(f, "Number of encryption keys ({}) provided for nested encryptions is not compatible with number of layers specified ({}).", nkeys, nlayers),
+      Self::NumMeasurementLayers(current, expected) => write!(f, "Number of inferred measurement layers is {}, but expected is {}.", current, expected),
+      Self::Serialization(err_string) => write!(f, "An error occurred during serialization/deserialization: {}.", err_string),
+      Self::RandomnessSampling(err_string) => write!(f, "An error occurred during the sampling of randomness: {}.", err_string),
+      Self::MessageGeneration(err_string) => write!(f, "An error when attempting to generate the message: {}.", err_string),
+      Self::MessageParse => write!(f, "An error when attempting to parse the message."),
+      Self::ProofMissing => write!(f, "Proof missing for randomness point."),
+      Self::MissingVerificationParams => write!(f, "Verification key or proofs missing, must supply both or none.")
     }
   }
 }
