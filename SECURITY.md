@@ -2,9 +2,8 @@
 
 ## Supported Versions
 
-All supported features, as described [here](./README.md#supported-features).
+All versions including and above the current stable release version number.
 
 ## Reporting a Vulnerability
 
-This code is in active development, please report vulnerabilities as
-issues in the [GitHub repository](https://github.com/brave-experiments/nested-sta-rs/). 
+See https://hackerone.com/brave for details.
