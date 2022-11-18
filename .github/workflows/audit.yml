@@ -1,7 +1,13 @@
 name: Security audit
 on:
   push:
-    paths: 
+    paths:
+      - '**/Cargo.toml'
+      - '**/Cargo.lock'
+  pull_request:
+    branches:
+      main
+    paths:
       - '**/Cargo.toml'
       - '**/Cargo.lock'
   schedule:
