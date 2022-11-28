@@ -14,7 +14,7 @@ use crate::Error;
 
 // Internal consts
 const LAYER_ENC_KEY_LEN: usize = 16;
-const NESTED_STAR_ENCRYPTION_LABEL: &str = "nested_star_layer_encrypt";
+const NESTED_STAR_ENCRYPTION_LABEL: &str = "constellation_layer_encrypt";
 
 /// The `NestedMeasurement` struct provides a mechanism for submitting
 /// measurements as vectors.
