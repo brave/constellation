@@ -18,4 +18,4 @@ lazy_static = "1.4.0"
 [dev-dependencies]
 httpmock = "0.6.6"
 insta = "1.22.0"
-base64 = "0.13.1"
+base64 = "0.20.0"
