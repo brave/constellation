@@ -20,7 +20,6 @@ impl RandomnessSampling {
   pub fn new(nm: &NestedMeasurement, epoch: u8) -> Self {
     Self {
       input: (0..nm.len())
-        .into_iter()
         .map(|i| nm.get_layer_as_bytes(i))
         .collect(),
       epoch,
