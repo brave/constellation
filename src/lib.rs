@@ -262,12 +262,12 @@ impl std::fmt::Display for Error {
   fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
     match self {
       Self::ShareRecovery => write!(f, "Internal share recovery failed"),
-      Self::ClientMeasurementMismatch(original, received) => write!(f, "Clients sent differing measurement for identical share sets, original: {}, received: {}", original, received),
-      Self::LayerEncryptionKeys(nkeys, nlayers) => write!(f, "Number of encryption keys ({}) provided for nested encryptions is not compatible with number of layers specified ({}).", nkeys, nlayers),
-      Self::NumMeasurementLayers(current, expected) => write!(f, "Number of inferred measurement layers is {}, but expected is {}.", current, expected),
-      Self::Serialization(err_string) => write!(f, "An error occurred during serialization/deserialization: {}.", err_string),
-      Self::RandomnessSampling(err_string) => write!(f, "An error occurred during the sampling of randomness: {}.", err_string),
-      Self::MessageGeneration(err_string) => write!(f, "An error when attempting to generate the message: {}.", err_string),
+      Self::ClientMeasurementMismatch(original, received) => write!(f, "Clients sent differing measurement for identical share sets, original: {original}, received: {received}"),
+      Self::LayerEncryptionKeys(nkeys, nlayers) => write!(f, "Number of encryption keys ({nkeys}) provided for nested encryptions is not compatible with number of layers specified ({nlayers})."),
+      Self::NumMeasurementLayers(current, expected) => write!(f, "Number of inferred measurement layers is {current}, but expected is {expected}."),
+      Self::Serialization(err_string) => write!(f, "An error occurred during serialization/deserialization: {err_string}."),
+      Self::RandomnessSampling(err_string) => write!(f, "An error occurred during the sampling of randomness: {err_string}."),
+      Self::MessageGeneration(err_string) => write!(f, "An error when attempting to generate the message: {err_string}."),
       Self::MessageParse => write!(f, "An error when attempting to parse the message."),
       Self::ProofMissing => write!(f, "Proof missing for randomness point."),
       Self::MissingVerificationParams => write!(f, "Verification key or proofs missing, must supply both or none.")
