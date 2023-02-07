@@ -427,7 +427,6 @@ pub fn recover_partial_measurements(
         // been recovered
         if layer_idx + 1 < num_layers {
           let decrypted_messages = (0..indices.len())
-            .into_iter()
             .map(|i| {
               let ident = indices[i];
               let key = pms[i].get_next_layer_key().as_ref().unwrap();
@@ -441,12 +440,11 @@ pub fn recover_partial_measurements(
           next_layers.push(decrypted_messages);
         } else {
           (0..indices.len())
-            .into_iter()
             .for_each(|i| ident_nested_messages[indices[i]] = None);
         }
 
         // set the current partial outputs
-        (0..indices.len()).into_iter().for_each(|j| {
+        (0..indices.len()).for_each(|j| {
           let idx = indices[j];
           measurements[idx] = Ok(Some(FinalMeasurement::from(&pms[j])));
         });
