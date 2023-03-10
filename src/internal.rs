@@ -777,9 +777,8 @@ mod tests {
   fn end_to_end_advanced(aux: Option<Vec<u8>>) {
     let threshold: usize = 3;
     let measurement_len = 5;
-    let mut full_input: Vec<Vec<u8>> = (0..5)
-      .map(|_| vec![1u8, 2u8, 3u8, 4u8, 5u8])
-      .collect();
+    let mut full_input: Vec<Vec<u8>> =
+      (0..5).map(|_| vec![1u8, 2u8, 3u8, 4u8, 5u8]).collect();
     full_input.extend(
       (0..3)
         .map(|_| vec![1u8, 2u8, 3u8, 5u8, 6u8])
