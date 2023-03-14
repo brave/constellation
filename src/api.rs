@@ -244,7 +244,6 @@ mod tests {
       vec!["hello".as_bytes().to_vec(), "world".as_bytes().to_vec()];
     let random_fetcher = LocalFetcher::new();
     let messages: Vec<Vec<u8>> = (0..threshold - 1)
-      .into_iter()
       .map(|_| {
         let rrs = client::prepare_measurement(&measurement, epoch).unwrap();
         let req = client::construct_randomness_request(&rrs);
@@ -348,10 +347,8 @@ mod tests {
 
     // combine all measurements together
     let measurements: Vec<Vec<Vec<u8>>> = (0..total_num_measurements)
-      .into_iter()
       .map(|i| {
         (0..counts[i])
-          .into_iter()
           .map(|_| all_measurements[i].to_vec())
           .collect()
       })

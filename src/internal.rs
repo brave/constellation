@@ -756,7 +756,6 @@ mod tests {
     let num_clients = 3;
     let (outputs, measurements) = end_to_end(
       (0..num_clients)
-        .into_iter()
         .map(|_| vec![1u8, 2u8, 3u8, 4u8, 5u8])
         .collect(),
       &aux,
@@ -778,37 +777,30 @@ mod tests {
   fn end_to_end_advanced(aux: Option<Vec<u8>>) {
     let threshold: usize = 3;
     let measurement_len = 5;
-    let mut full_input: Vec<Vec<u8>> = (0..5)
-      .into_iter()
-      .map(|_| vec![1u8, 2u8, 3u8, 4u8, 5u8])
-      .collect();
+    let mut full_input: Vec<Vec<u8>> =
+      (0..5).map(|_| vec![1u8, 2u8, 3u8, 4u8, 5u8]).collect();
     full_input.extend(
       (0..3)
-        .into_iter()
         .map(|_| vec![1u8, 2u8, 3u8, 5u8, 6u8])
         .collect::<Vec<Vec<u8>>>(),
     );
     full_input.extend(
       (0..1)
-        .into_iter()
         .map(|_| vec![1u8, 2u8, 5u8, 6u8, 7u8])
         .collect::<Vec<Vec<u8>>>(),
     );
     full_input.extend(
       (0..2)
-        .into_iter()
         .map(|_| vec![2u8, 3u8, 4u8, 5u8, 6u8])
         .collect::<Vec<Vec<u8>>>(),
     );
     full_input.extend(
       (0..3)
-        .into_iter()
         .map(|_| vec![3u8, 4u8, 5u8, 6u8, 7u8])
         .collect::<Vec<Vec<u8>>>(),
     );
     full_input.extend(
       (0..1)
-        .into_iter()
         .map(|_| vec![3u8, 4u8, 5u8, 7u8, 8u8])
         .collect::<Vec<Vec<u8>>>(),
     );
