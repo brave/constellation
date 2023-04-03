@@ -1,16 +1,16 @@
 [package]
 name = "star-constellation"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Alex Davidson <coela@alxdavids.xyz>"]
 license = "MPL-2.0"
 description = "Nested threshold aggregation built on the STAR protocol"
 edition = "2018"
 
 [dependencies]
-serde = { version="1.0.158", features = ["derive"] }
-serde_json = "1.0.94"
-ppoprf = { git = "https://github.com/brave/sta-rs", rev = "97152feb438da6a5de0f83f0ad1e46e73a4ac3d6" }
-sta-rs = { git = "https://github.com/brave/sta-rs", rev = "97152feb438da6a5de0f83f0ad1e46e73a4ac3d6" }
+serde = { version = "1.0.147", features = ["derive"] }
+serde_json = "1.0.79"
+ppoprf = { git = "https://github.com/brave/sta-rs", rev = "a0381f242314a906425e39f73656717e024636f3" }
+sta-rs = { git = "https://github.com/brave/sta-rs", rev = "a0381f242314a906425e39f73656717e024636f3" }
 rand_core = "0.6.3"
 rand = { version = "0.8" }
 bincode = "1.3"
