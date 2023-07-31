@@ -162,15 +162,19 @@ impl NestedMessage {
   /// The `decrypt_next_layer` function decrypts the next layer of
   /// encrypted messages and sets the unencrypted layer to be equal to
   /// the decrypted message
-  pub fn decrypt_next_layer(&mut self, key: &[u8]) {
+  pub fn decrypt_next_layer(
+    &mut self,
+    key: &[u8],
+  ) -> Result<(), bincode::Error> {
     if self.encrypted_layers.is_empty() {
       panic!("No more layers to decrypt");
     }
     let decrypted =
       self.encrypted_layers[0].decrypt(key, NESTED_STAR_ENCRYPTION_LABEL);
-    let sm: SerializableMessage = bincode::deserialize(&decrypted).unwrap();
+    let sm: SerializableMessage = bincode::deserialize(&decrypted)?;
     self.unencrypted_layer = sm.into();
     self.encrypted_layers = self.encrypted_layers[1..].to_vec();
+    Ok(())
   }
 }
 
@@ -329,7 +333,7 @@ impl IdentNestedMessage {
     &self.message.unencrypted_layer
   }
 
-  fn decrypt_next_layer(&mut self, key: &[u8]) {
+  fn decrypt_next_layer(&mut self, key: &[u8]) -> Result<(), bincode::Error> {
     self.message.decrypt_next_layer(key)
   }
 }
@@ -431,7 +435,7 @@ pub fn recover_partial_measurements(
               let ident = indices[i];
               let key = pms[i].get_next_layer_key().as_ref().unwrap();
               let msg = ident_nested_messages[ident].as_mut().unwrap();
-              msg.decrypt_next_layer(key);
+              msg.decrypt_next_layer(key).unwrap();
               msg.get_next_layer()
             })
             .collect();
@@ -988,7 +992,7 @@ mod tests {
 
       // decrypt next layer
       if i < 2 {
-        nested_message.decrypt_next_layer(&keys[i]);
+        nested_message.decrypt_next_layer(&keys[i]).unwrap();
       }
     }
   }
