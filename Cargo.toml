@@ -2,8 +2,12 @@
 name = "star-constellation"
 version = "0.2.1"
 authors = ["Alex Davidson <coela@alxdavids.xyz>"]
-license = "MPL-2.0"
 description = "Nested threshold aggregation built on the STAR protocol"
+documentation = "https://docs.rs/star-constellation"
+repository = "https://github.com/brave/constellation"
+keywords = ["crypto", "protocol", "privacy", "analytics"]
+categories = ["cryptography", "algorithms"]
+license = "MPL-2.0"
 edition = "2018"
 
 [dependencies]
