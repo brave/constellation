@@ -7,7 +7,7 @@ use sta_rs::{
   Message, MessageGenerator, Share, SingleMeasurement,
 };
 
-use rand_core::{OsRng, RngCore};
+use rand::{rngs::OsRng, RngCore};
 
 use crate::consts::*;
 use crate::Error;
