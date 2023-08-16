@@ -12,7 +12,7 @@ edition = "2021"
 
 [dependencies]
 serde = { version = "1.0.147", features = ["derive"] }
-serde_json = "1.0.78"
+serde_json = "1.0.105"
 ppoprf = "0.3.1"
 sta-rs = "0.2.2"
 rand = { version = "0.8", features = ["getrandom"] }
