@@ -417,14 +417,13 @@ pub fn recover_partial_measurements(
         };
         // returns an ordered vector of partial measurements for
         // the current leaf
-        let res_pms = recover(&messages, &key);
-        if let Err(e) = res_pms {
+        let pms = recover(&messages, &key);
+        if let Some(res) = pms.iter().find(|res| res.is_err()) {
           indices
             .iter()
-            .for_each(|&idx| measurements[idx] = Err(e.clone()));
+            .for_each(|&idx| measurements[idx] = Err(res.clone().unwrap_err()));
           continue;
-        }
-        let pms = res_pms.unwrap();
+        };
 
         // We may need to decrypt the next layer of STAR
         // messages for those partial measurments which have
@@ -433,7 +432,12 @@ pub fn recover_partial_measurements(
           let decrypted_messages = (0..indices.len())
             .map(|i| {
               let ident = indices[i];
-              let key = pms[i].get_next_layer_key().as_ref().unwrap();
+              let key = pms[i]
+                .as_ref()
+                .unwrap()
+                .get_next_layer_key()
+                .as_ref()
+                .unwrap();
               let msg = ident_nested_messages[ident].as_mut().unwrap();
               msg.decrypt_next_layer(key).unwrap();
               msg.get_next_layer()
@@ -450,7 +454,8 @@ pub fn recover_partial_measurements(
         // set the current partial outputs
         (0..indices.len()).for_each(|j| {
           let idx = indices[j];
-          measurements[idx] = Ok(Some(FinalMeasurement::from(&pms[j])));
+          measurements[idx] =
+            Ok(Some(FinalMeasurement::from(pms[j].as_ref().unwrap())));
         });
       }
     }
@@ -497,73 +502,71 @@ pub fn sample_layer_enc_keys(num_layers: usize) -> Vec<Vec<u8>> {
   keys
 }
 
+fn decode_message_plaintext(
+  plaintext: &[u8],
+) -> Result<(Vec<u8>, NestedAssociatedData), Error> {
+  // parse all measurement bytes
+  if let Some(buf) = load_bytes(plaintext) {
+    // parse remaining bytes of auxiliary data
+    let rem = &plaintext[4 + buf.len()..];
+
+    if let Some(aux_bytes) = load_bytes(rem) {
+      let measurement_bytes = buf.to_vec();
+
+      return match bincode::deserialize(aux_bytes) {
+        Ok(aux) => Ok((measurement_bytes, aux)),
+        Err(e) => Err(Error::Serialization(format!(
+          "bincode::deserialize failed recovering aux data: {e}"
+        ))),
+      };
+    }
+  }
+  Err(Error::MessageParse)
+}
+
 /// Run the standard star recovery procedure for an array of STAR
 /// messages
 pub fn recover(
   subset: &[&Message],
   key: &[u8],
-) -> Result<Vec<PartialMeasurement>, Error> {
-  let ciphertexts = subset.iter().map(|t| t.ciphertext.clone());
-  let plaintexts = ciphertexts.map(|c| c.decrypt(key, "star_encrypt"));
+) -> Vec<Result<PartialMeasurement, Error>> {
+  let mut measurement_for_validation = None;
 
-  let splits: Vec<Result<(Vec<u8>, NestedAssociatedData), Error>> = plaintexts
-    .map(|slice| {
-      // parse all measurement bytes
-      if let Some(buf) = load_bytes(&slice) {
-        // parse remaining bytes of auxiliary data
-        let rem = &slice[4 + buf.len()..];
-        if let Some(aux_bytes) = load_bytes(rem) {
-          let measurement_bytes = buf.to_vec();
-          if let Ok(aux) = bincode::deserialize(aux_bytes) {
-            return Ok((measurement_bytes, aux));
-          } else {
-            return Err(Error::Serialization(
-              "bincode::deserialize failed recovering aux data".to_string(),
-            ));
+  let plaintexts = subset
+    .iter()
+    .map(|t| t.ciphertext.decrypt(key, "star_encrypt"));
+
+  plaintexts
+    .map(|plaintext| {
+      decode_message_plaintext(&plaintext).and_then(
+        |(measurement_bytes, aux)| {
+          // check that decrypted measurements all have the same value.
+          match measurement_for_validation.as_ref() {
+            Some(measurement_for_validation) => {
+              // Compare current measurement to the first successful measurement
+              if measurement_for_validation != &measurement_bytes {
+                return Err(Error::ClientMeasurementMismatch(
+                  serde_json::to_string(measurement_for_validation).unwrap(),
+                  serde_json::to_string(&measurement_bytes).unwrap(),
+                ));
+              }
+            }
+            None => {
+              // Store the first successful measurement so we can
+              // compare subsequent measurements to this one.
+              measurement_for_validation = Some(measurement_bytes.clone());
+            }
           }
-        }
-      }
-      Err(Error::MessageParse)
+
+          let y = vec![measurement_bytes];
+          Ok(PartialMeasurement {
+            measurement: NestedMeasurement::new(&y).unwrap(),
+            aux,
+          })
+        },
+      )
     })
-    .collect();
-
-  // we also ensure that no message parsing errors occurred, we should
-  // recover with only a threshold number of messages, so any error that
-  // occurs should be fatal for recovery
-  if splits.iter().any(|x| x.is_err()) {
-    return Err(Error::MessageParse);
-  }
-
-  // check that decrypted measurements all have the same value.
-  // we can unwrap here because errors should have been caught above
-  let measurement = &splits[0].as_ref().unwrap().0;
-  for to_chk in splits.iter().skip(1) {
-    let measurement_to_chk = &to_chk.as_ref().unwrap().0;
-    if measurement_to_chk != measurement {
-      return Err(Error::ClientMeasurementMismatch(
-        serde_json::to_string(measurement).unwrap(),
-        serde_json::to_string(&measurement_to_chk).unwrap(),
-      ));
-    }
-  }
-
-  // Output all partial measurements and associated auxiliary data
-  Ok(
-    splits
-      .into_iter()
-      .map(|res| {
-        // we can unwrap here because errors should have been caught
-        // above
-        let (measurement_bytes, aux) = res.unwrap();
-        let y = vec![measurement_bytes];
-        let nm = NestedMeasurement::new(&y).unwrap();
-        PartialMeasurement {
-          measurement: nm,
-          aux,
-        }
-      })
-      .collect(),
-  )
+    .collect()
 }
 
 /// Runs the standard STAR key recovery mechanism
