@@ -465,7 +465,7 @@ pub fn recover_partial_measurements(
 
   ident_nested_messages
     .into_iter()
-    .zip(measurements.into_iter())
+    .zip(measurements)
     .map(|(ident_nested_msg, measurement)| match measurement {
       Err(e) => Err(e),
       Ok(msmt) => {
