@@ -611,8 +611,8 @@ fn group_messages(node: &[IdentMessage]) -> Vec<Vec<usize>> {
 
 #[cfg(test)]
 mod tests {
-  use base64::prelude::{Engine as _, BASE64_STANDARD as BASE64};
   use super::*;
+  use base64::prelude::{Engine as _, BASE64_STANDARD as BASE64};
   use insta::assert_snapshot;
   use sta_rs::share_recover;
 
