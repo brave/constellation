@@ -612,6 +612,7 @@ fn group_messages(node: &[IdentMessage]) -> Vec<Vec<usize>> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use base64::prelude::{Engine as _, BASE64_STANDARD as BASE64};
   use insta::assert_snapshot;
   use sta_rs::share_recover;
 
@@ -629,7 +630,7 @@ mod tests {
   /// let mut rnd = [0u8; sta_rs::DIGEST_LEN];
   /// mg.sample_local_randomness(&mut rnd);
   /// let message = sta_rs::Message::generate(&mg, &mut rnd, None).unwrap();
-  /// println!("EXAMPLE_SHARE: {}", base64::encode(message.share.to_bytes()));
+  /// println!("EXAMPLE_SHARE: {}", BASE64.encode(message.share.to_bytes()));
   /// ```
   const EXAMPLE_SHARE: &str = "AgAAADAAAAAjbxRyzvFKynnzP/l2NQ8MAAAAAAAAAAAZBEVLkZXDJHvki6l75wXFAAAAAAAAAAAgAAAA4rynd5v1ane0FkR8aVvfDFwP+Y+mHhpZFWujfWErvvAgAAAAdasndZJ68kHipgIaudx6x9J0dzv9RSTuPprqAZOjk/2VTqVc+zQwXCNSCt9oUwZgA9M7ELpeyeYoaZHk6W0GbRaW7ptj73/Zrtg26acmwi1+EDb3ObNKNojcHuOQjAWY";
 
@@ -692,7 +693,7 @@ mod tests {
       epoch: 1u8,
       unencrypted_layer: Message {
         ciphertext: Ciphertext::from_bytes(&[7u8; 40]),
-        share: Share::from_bytes(&base64::decode(EXAMPLE_SHARE).unwrap())
+        share: Share::from_bytes(&BASE64.decode(EXAMPLE_SHARE).unwrap())
           .unwrap(),
         tag: vec![12u8; 32],
       },
@@ -707,7 +708,7 @@ mod tests {
     let snm_bincode =
       bincode::serialize(&snm).expect("Should serialize to bincode");
 
-    assert_snapshot!(base64::encode(&snm_bincode));
+    assert_snapshot!(BASE64.encode(&snm_bincode));
 
     bincode::deserialize::<SerializableNestedMessage>(&snm_bincode)
       .expect("Should load bincode");
