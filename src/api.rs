@@ -106,9 +106,9 @@ pub mod client {
 pub mod server {
   //! The server module wraps all public API functions used by the
   //! aggregation server.
-  use crate::format::*;
   use crate::internal::recover_partial_measurements;
   use crate::internal::{NestedMessage, SerializableNestedMessage};
+  use crate::{format::*, Error};
   use std::collections::hash_map::Entry;
   use std::collections::HashMap;
 
@@ -130,10 +130,11 @@ pub mod server {
     let mut recovery_errors = 0;
     let mut nms = Vec::<NestedMessage>::new();
     for snm_ser in snms_serialized.iter() {
-      let res: Result<SerializableNestedMessage, _> =
-        bincode::deserialize(snm_ser);
-      if let Ok(x) = res {
-        nms.push(NestedMessage::from(x));
+      let res = bincode::deserialize::<SerializableNestedMessage>(snm_ser)
+        .map_err(|e| Error::Serialization(e.to_string()))
+        .and_then(NestedMessage::try_from);
+      if let Ok(nm) = res {
+        nms.push(nm);
         continue;
       }
       serde_errors += 1;
