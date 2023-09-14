@@ -65,15 +65,21 @@ struct SerializableMessage {
   share: Vec<u8>,
   tag: Vec<u8>,
 }
-impl From<SerializableMessage> for Message {
-  fn from(sm: SerializableMessage) -> Message {
-    Message {
+
+impl TryFrom<SerializableMessage> for Message {
+  type Error = Error;
+
+  fn try_from(sm: SerializableMessage) -> Result<Message, Error> {
+    Ok(Message {
       ciphertext: Ciphertext::from(sm.ciphertext),
-      share: Share::from_bytes(&sm.share).unwrap(),
+      share: Share::from_bytes(&sm.share).ok_or_else(|| {
+        Error::Serialization("invalid serialized share".to_string())
+      })?,
       tag: sm.tag,
-    }
+    })
   }
 }
+
 impl From<Message> for SerializableMessage {
   fn from(message: Message) -> Self {
     Self {
@@ -162,17 +168,15 @@ impl NestedMessage {
   /// The `decrypt_next_layer` function decrypts the next layer of
   /// encrypted messages and sets the unencrypted layer to be equal to
   /// the decrypted message
-  pub fn decrypt_next_layer(
-    &mut self,
-    key: &[u8],
-  ) -> Result<(), bincode::Error> {
+  pub fn decrypt_next_layer(&mut self, key: &[u8]) -> Result<(), Error> {
     if self.encrypted_layers.is_empty() {
       panic!("No more layers to decrypt");
     }
     let decrypted =
       self.encrypted_layers[0].decrypt(key, NESTED_STAR_ENCRYPTION_LABEL);
-    let sm: SerializableMessage = bincode::deserialize(&decrypted)?;
-    self.unencrypted_layer = sm.into();
+    let sm: SerializableMessage = bincode::deserialize(&decrypted)
+      .map_err(|e| Error::Serialization(e.to_string()))?;
+    self.unencrypted_layer = sm.try_into()?;
     self.encrypted_layers = self.encrypted_layers[1..].to_vec();
     Ok(())
   }
@@ -185,32 +189,39 @@ pub struct SerializableNestedMessage {
   unencrypted_layer: SerializableMessage,
   encrypted_layers: Vec<Vec<u8>>,
 }
-impl From<SerializableNestedMessage> for NestedMessage {
-  fn from(sm: SerializableNestedMessage) -> NestedMessage {
-    NestedMessage {
+
+impl TryFrom<SerializableNestedMessage> for NestedMessage {
+  type Error = Error;
+
+  fn try_from(sm: SerializableNestedMessage) -> Result<NestedMessage, Error> {
+    Ok(NestedMessage {
       epoch: sm.epoch,
-      unencrypted_layer: sm.unencrypted_layer.into(),
+      unencrypted_layer: sm.unencrypted_layer.try_into()?,
       encrypted_layers: sm
         .encrypted_layers
         .into_iter()
         .map(Ciphertext::from)
         .collect(),
-    }
+    })
   }
 }
-impl From<&SerializableNestedMessage> for NestedMessage {
-  fn from(sm: &SerializableNestedMessage) -> NestedMessage {
-    NestedMessage {
+
+impl TryFrom<&SerializableNestedMessage> for NestedMessage {
+  type Error = Error;
+
+  fn try_from(sm: &SerializableNestedMessage) -> Result<NestedMessage, Error> {
+    Ok(NestedMessage {
       epoch: sm.epoch,
-      unencrypted_layer: sm.unencrypted_layer.clone().into(),
+      unencrypted_layer: sm.unencrypted_layer.clone().try_into()?,
       encrypted_layers: sm
         .encrypted_layers
         .iter()
         .map(|c| Ciphertext::from(c.to_vec()))
         .collect(),
-    }
+    })
   }
 }
+
 impl From<NestedMessage> for SerializableNestedMessage {
   fn from(nm: NestedMessage) -> Self {
     Self {
@@ -333,7 +344,7 @@ impl IdentNestedMessage {
     &self.message.unencrypted_layer
   }
 
-  fn decrypt_next_layer(&mut self, key: &[u8]) -> Result<(), bincode::Error> {
+  fn decrypt_next_layer(&mut self, key: &[u8]) -> Result<(), Error> {
     self.message.decrypt_next_layer(key)
   }
 }
