@@ -2,7 +2,7 @@
 
 Rust library implementing the *Constellation* threshold aggregation
 mechanism. It allows clients to submit ordered, granular data at
-the highest that is possible whilst maintaining crowd-based
+the highest level of detail possible whilst maintaining crowd-based
 anonymity. The receiving server can only decode messages whose
 contents were also submitted by some threshold number of other
 clients, blocking identification of unique behaviour.
