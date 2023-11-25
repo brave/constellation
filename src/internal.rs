@@ -38,13 +38,7 @@ impl NestedMeasurement {
     self
       .0
       .iter()
-      .map(|x| {
-        MessageGenerator::new(
-          x.clone(),
-          threshold,
-          &String::from(epoch as char),
-        )
-      })
+      .map(|x| MessageGenerator::new(x.clone(), threshold, &[epoch]))
       .collect()
   }
 
