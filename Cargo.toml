@@ -23,3 +23,8 @@ lazy_static = "1.4.0"
 httpmock = "0.6.8"
 insta = "1.34.0"
 base64 = "0.21.5"
+criterion = "0.5.1"
+
+[[bench]]
+name = "constellation"
+harness = false
