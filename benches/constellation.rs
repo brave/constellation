@@ -18,13 +18,13 @@ fn prepare(threshold: u32) -> Result<Vec<u8>, star_constellation::Error> {
     let rrs = client::prepare_measurement(&measurements, epoch).unwrap();
     let req = client::construct_randomness_request(&rrs);
 
-    let req_slice_vec: Vec<&[u8]> = req.into_iter()
+    let req_slice_vec: Vec<&[u8]> = req.iter()
         .map(|v| v.as_slice()).collect();
     let oprf = LocalFetcher::new();
     let res = oprf.eval(&req_slice_vec, epoch).unwrap();
 
     let res_slice_vec: Vec<&[u8]> =
-        res.serialized_points.into_iter().map(|v| v.as_slice()).collect();
+        res.serialized_points.iter().map(|v| v.as_slice()).collect();
     client::construct_message(&res_slice_vec, None, &rrs, &None, &[], threshold)
 }
 
