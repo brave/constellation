@@ -940,7 +940,7 @@ mod tests {
     let rand = sample_randomness(&mgs);
     let mut nested_message =
       NestedMessage::new(&mgs, &rand, &keys, added_data, epoch).unwrap();
-    let checks = vec![
+    let checks = [
       vec![
         171, 38, 129, 158, 77, 71, 82, 131, 243, 52, 6, 92, 214, 67, 67, 126,
         65, 245, 244, 10, 227, 83, 71, 88, 151, 34, 13, 132, 202, 224, 160,
