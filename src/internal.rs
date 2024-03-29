@@ -618,7 +618,6 @@ fn group_messages(node: &[IdentMessage]) -> Vec<Vec<usize>> {
 mod tests {
   use super::*;
   use base64::prelude::{Engine as _, BASE64_STANDARD as BASE64};
-  use insta::assert_snapshot;
   use sta_rs::share_recover;
 
   /// Example sta_rs::Share value for testing
@@ -713,7 +712,8 @@ mod tests {
     let snm_bincode =
       bincode::serialize(&snm).expect("Should serialize to bincode");
 
-    assert_snapshot!(BASE64.encode(&snm_bincode));
+    let expected = "ASgAAAAAAAAABwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHB8AAAAAAAAAAAgAAADAAAAAjbxRyzvFKynnzP/l2NQ8MAAAAAAAAAAAZBEVLkZXDJHvki6l75wXFAAAAAAAAAAAgAAAA4rynd5v1ane0FkR8aVvfDFwP+Y+mHhpZFWujfWErvvAgAAAAdasndZJ68kHipgIaudx6x9J0dzv9RSTuPprqAZOjk/2VTqVc+zQwXCNSCt9oUwZgA9M7ELpeyeYoaZHk6W0GbRaW7ptj73/Zrtg26acmwi1+EDb3ObNKNojcHuOQjAWYIAAAAAAAAAAMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAMAAAAAAAAAEAAAAAAAAAACAgICAgICAgICAgICAgICGQAAAAAAAAACAgICAgICAgICAgICAgICAgICAgICAgICIQAAAAAAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=";
+    assert_eq!(BASE64.encode(&snm_bincode), expected);
 
     bincode::deserialize::<SerializableNestedMessage>(&snm_bincode)
       .expect("Should load bincode");
@@ -940,7 +940,7 @@ mod tests {
     let rand = sample_randomness(&mgs);
     let mut nested_message =
       NestedMessage::new(&mgs, &rand, &keys, added_data, epoch).unwrap();
-    let checks = vec![
+    let checks = [
       vec![
         171, 38, 129, 158, 77, 71, 82, 131, 243, 52, 6, 92, 214, 67, 67, 126,
         65, 245, 244, 10, 227, 83, 71, 88, 151, 34, 13, 132, 202, 224, 160,
