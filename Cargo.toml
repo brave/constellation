@@ -1,6 +1,6 @@
 [package]
 name = "star-constellation"
-version = "0.2.5"
+version = "0.3.0"
 authors = ["Alex Davidson <coela@alxdavids.xyz>"]
 description = "Nested threshold aggregation built on the STAR protocol"
 documentation = "https://docs.rs/star-constellation"

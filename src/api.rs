@@ -18,15 +18,18 @@ pub mod client {
   //! The default implementations of each of the functions can be used
   //! for running an example Client. Each of these functions can be
   //! swapped out for alternative implementations.
+  use crate::consts::RANDOMNESS_LEN;
   use crate::format::*;
-  use crate::internal::sample_layer_enc_keys;
-  use crate::internal::NestedMeasurement;
-  use crate::internal::{NestedMessage, SerializableNestedMessage};
+  use crate::internal::{
+    sample_layer_enc_keys, NestedMeasurement, NestedMessage,
+    SerializableNestedMessage,
+  };
   use crate::randomness::{
     process_randomness_response, RequestState as RandomnessRequestState,
   };
   use crate::Error;
   use ppoprf::ppoprf;
+  use sta_rs::{MessageGenerator, SingleMeasurement};
 
   /// The function `prepare_measurement` takes a vector of measurement
   /// values (serialized as bytes), and an epoch. A randomness request state
@@ -98,6 +101,43 @@ pub mod client {
       &keys,
       aux_bytes,
       mgf.epoch(),
+    )?);
+    bincode::serialize(&snm).map_err(|e| Error::Serialization(e.to_string()))
+  }
+
+  /// Constructs a message using local randomness sampling (STARLite).
+  pub fn construct_message_with_local_sampling(
+    measurement: &[Vec<u8>],
+    epoch: u8,
+    threshold: u32,
+    aux_bytes: &[u8],
+  ) -> Result<Vec<u8>, Error> {
+    let nm = NestedMeasurement::new(measurement)?;
+
+    let mut randomness_input = Vec::<u8>::new();
+    let randomness: Vec<[u8; RANDOMNESS_LEN]> = (0..nm.len())
+      .map(|i| {
+        randomness_input.extend(nm.get_layer_as_bytes(i));
+        let mg = MessageGenerator::new(
+          SingleMeasurement::new(&randomness_input),
+          threshold,
+          &[epoch],
+        );
+        let mut randomness = [0u8; RANDOMNESS_LEN];
+        mg.sample_local_randomness(&mut randomness);
+        randomness
+      })
+      .collect();
+
+    let keys = sample_layer_enc_keys(nm.len());
+    let mgs = nm.get_message_generators(threshold, epoch);
+
+    let snm = SerializableNestedMessage::from(NestedMessage::new(
+      &mgs,
+      &randomness,
+      &keys,
+      aux_bytes,
+      epoch,
     )?);
     bincode::serialize(&snm).map_err(|e| Error::Serialization(e.to_string()))
   }
@@ -204,6 +244,37 @@ mod tests {
     assert_eq!(outputs.len(), 1);
     assert_eq!(outputs[0].value(), vec!["world"]);
     assert_eq!(outputs[0].auxiliary_data(), vec![aux]);
+    assert_eq!(agg_res.num_recovery_errors(), 0);
+    assert_eq!(agg_res.num_serde_errors(), 0);
+  }
+
+  #[test]
+  fn basic_test_local_sampling() {
+    let epoch = 0;
+    let threshold = 5;
+    let measurement = vec![
+      "hello".as_bytes().to_vec(),
+      "world".as_bytes().to_vec(),
+      "brave".as_bytes().to_vec(),
+    ];
+    let aux = "added_data".as_bytes().to_vec();
+
+    let msgs: Vec<_> = (0..threshold)
+      .map(|_| {
+        client::construct_message_with_local_sampling(
+          &measurement,
+          epoch,
+          threshold,
+          &aux,
+        )
+        .unwrap()
+      })
+      .collect();
+    let agg_res = server::aggregate(&msgs, threshold, epoch, 3);
+    let outputs = agg_res.outputs();
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].value(), vec!["brave"]);
+    assert_eq!(outputs[0].auxiliary_data()[0], aux);
     assert_eq!(agg_res.num_recovery_errors(), 0);
     assert_eq!(agg_res.num_serde_errors(), 0);
   }
