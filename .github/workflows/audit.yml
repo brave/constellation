@@ -12,6 +12,10 @@ on:
       - '**/Cargo.lock'
   schedule:
     - cron: '19 20 1 * *'
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   audit:
     runs-on: ubuntu-latest

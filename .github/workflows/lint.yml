@@ -10,6 +10,11 @@ on:
   schedule:
     - cron: '19 20 2 * *'
 
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 jobs:
   lint:
     runs-on: ubuntu-latest
