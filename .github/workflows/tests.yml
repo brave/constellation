@@ -11,13 +11,7 @@ permissions:
 
 jobs:
   test:
-    name: ${{matrix.rust}} on ${{matrix.os}}
-    runs-on: ${{matrix.os}}
-
-    strategy:
-      matrix:
-        rust: [1.72.1, stable]
-        os: [ubuntu-latest]
+    runs-on: ubuntu-latest
 
     env:
       RUSTFLAGS: ''
@@ -26,9 +20,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
-
-      - name: Toolchain
-        run: rustup default ${{matrix.rust}}
 
       - name: Build
         run: cargo build --release --all-targets
