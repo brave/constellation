@@ -10,6 +10,7 @@ use sta_rs::{
 use rand::{rngs::OsRng, RngCore};
 
 use crate::consts::*;
+use crate::util::{deserialize, serialize};
 use crate::Error;
 
 // Internal consts
@@ -128,9 +129,7 @@ impl NestedMessage {
         key: key_aux,
         data: aux_data.to_vec(),
       };
-      let message_aux = Some(AssociatedData::new(
-        &bincode::serialize(&nested_aux).unwrap(),
-      ));
+      let message_aux = Some(AssociatedData::new(&serialize(&nested_aux)?));
 
       // generate message
       let message = Message::generate(mg, rnd, message_aux)
@@ -140,8 +139,7 @@ impl NestedMessage {
       // layer)
       if i > 0 {
         // serialize message
-        let bytes_to_encrypt =
-          bincode::serialize(&SerializableMessage::from(message)).unwrap();
+        let bytes_to_encrypt = serialize(&SerializableMessage::from(message))?;
         let encrypted_layer = Ciphertext::new(
           &keys[i - 1],
           &bytes_to_encrypt,
@@ -168,8 +166,7 @@ impl NestedMessage {
     }
     let decrypted =
       self.encrypted_layers[0].decrypt(key, NESTED_STAR_ENCRYPTION_LABEL);
-    let sm: SerializableMessage = bincode::deserialize(&decrypted)
-      .map_err(|e| Error::Serialization(e.to_string()))?;
+    let sm: SerializableMessage = deserialize(&decrypted)?;
     self.unencrypted_layer = sm.try_into()?;
     self.encrypted_layers = self.encrypted_layers[1..].to_vec();
     Ok(())
@@ -518,10 +515,10 @@ fn decode_message_plaintext(
     if let Some(aux_bytes) = load_bytes(rem) {
       let measurement_bytes = buf.to_vec();
 
-      return match bincode::deserialize(aux_bytes) {
+      return match deserialize(aux_bytes) {
         Ok(aux) => Ok((measurement_bytes, aux)),
         Err(e) => Err(Error::Serialization(format!(
-          "bincode::deserialize failed recovering aux data: {e}"
+          "Failed to deserialize aux data: {e}"
         ))),
       };
     }
@@ -711,12 +708,14 @@ mod tests {
 
     let snm_bincode =
       bincode::serialize(&snm).expect("Should serialize to bincode");
-
-    let expected = "ASgAAAAAAAAABwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHB8AAAAAAAAAAAgAAADAAAAAjbxRyzvFKynnzP/l2NQ8MAAAAAAAAAAAZBEVLkZXDJHvki6l75wXFAAAAAAAAAAAgAAAA4rynd5v1ane0FkR8aVvfDFwP+Y+mHhpZFWujfWErvvAgAAAAdasndZJ68kHipgIaudx6x9J0dzv9RSTuPprqAZOjk/2VTqVc+zQwXCNSCt9oUwZgA9M7ELpeyeYoaZHk6W0GbRaW7ptj73/Zrtg26acmwi1+EDb3ObNKNojcHuOQjAWYIAAAAAAAAAAMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAMAAAAAAAAAEAAAAAAAAAACAgICAgICAgICAgICAgICGQAAAAAAAAACAgICAgICAgICAgICAgICAgICAgICAgICIQAAAAAAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=";
-    assert_eq!(BASE64.encode(&snm_bincode), expected);
-
+    insta::assert_snapshot!(BASE64.encode(&snm_bincode));
     bincode::deserialize::<SerializableNestedMessage>(&snm_bincode)
       .expect("Should load bincode");
+
+    let mut snm_cbor = Vec::new();
+    ciborium::into_writer(&snm, &mut snm_cbor)
+      .expect("Should serialize to cbor");
+    insta::assert_snapshot!(BASE64.encode(&snm_cbor));
   }
 
   #[test]
@@ -727,6 +726,15 @@ mod tests {
     assert!(
       bincode::deserialize::<SerializableNestedMessage>(&[21u8; 9000]).is_err()
     );
+
+    assert!(ciborium::from_reader::<SerializableNestedMessage, _>(
+      &[7u8; 58][..]
+    )
+    .is_err());
+    assert!(ciborium::from_reader::<SerializableNestedMessage, _>(
+      &[21u8; 9000][..]
+    )
+    .is_err());
   }
 
   #[test]
@@ -991,11 +999,13 @@ mod tests {
       } else {
         add_data.data = vec![];
       }
-      let serialized_aux = bincode::serialize(&add_data).unwrap();
+      let serialized_aux = serialize(&add_data).unwrap();
       assert_eq!(aux_check_bytes.len(), serialized_aux.len());
       assert_eq!(aux_check_bytes, serialized_aux);
+
+      // Verify deserialization works with the active serialization format
       let add_data_unserialized: NestedAssociatedData =
-        bincode::deserialize(&serialized_aux).unwrap();
+        deserialize(&aux_check_bytes).unwrap();
       assert_eq!(add_data_unserialized.key, add_data.key);
       assert_eq!(add_data_unserialized.data, add_data.data);
 
