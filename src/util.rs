@@ -19,6 +19,10 @@ pub fn serialize<T: Serialize>(value: &T) -> Result<Vec<u8>, Error> {
     return postcard::to_stdvec(value)
       .map_err(|e| Error::Serialization(e.to_string()));
   }
+  #[cfg(any(
+    not(any(feature = "postcard", feature = "bincode")),
+    all(feature = "postcard", feature = "bincode")
+  ))]
   unreachable!()
 }
 
@@ -33,5 +37,9 @@ pub fn deserialize<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> {
     return postcard::from_bytes(bytes)
       .map_err(|e| Error::Serialization(e.to_string()));
   }
+  #[cfg(any(
+    not(any(feature = "postcard", feature = "bincode")),
+    all(feature = "postcard", feature = "bincode")
+  ))]
   unreachable!()
 }
