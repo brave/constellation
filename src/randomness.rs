@@ -1,6 +1,7 @@
 //! Define interations with the randomness server OPRF
 use crate::consts::RANDOMNESS_LEN;
 use crate::format::RandomnessSampling;
+use crate::util::{deserialize, serialize};
 use crate::Error;
 use ppoprf::ppoprf;
 
@@ -16,10 +17,7 @@ pub fn process_randomness_response(
       let proof = match resp_proofs {
         Some(proofs) => {
           let data = proofs.get(i).ok_or(Error::ProofMissing)?;
-          Some(
-            ppoprf::ProofDLEQ::load_from_bincode(data)
-              .map_err(|e| Error::Serialization(e.to_string()))?,
-          )
+          Some(deserialize(data)?)
         }
         None => None,
       };
@@ -172,13 +170,8 @@ pub mod testing {
             result
               .serialized_points
               .push(eval.output.as_bytes().to_vec());
-            result.serialized_proofs.push(
-              eval
-                .proof
-                .unwrap()
-                .serialize_to_bincode()
-                .map_err(|e| Error::Serialization(e.to_string()))?,
-            );
+            let proof = eval.proof.unwrap();
+            result.serialized_proofs.push(serialize(&proof)?);
           }
         };
       }
