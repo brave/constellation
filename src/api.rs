@@ -27,6 +27,7 @@ pub mod client {
   use crate::randomness::{
     process_randomness_response, RequestState as RandomnessRequestState,
   };
+  use crate::util::serialize;
   use crate::Error;
   use ppoprf::ppoprf;
   use sta_rs::{MessageGenerator, SingleMeasurement};
@@ -65,7 +66,7 @@ pub mod client {
   /// In `construct_message` the client uses the base64 decoded output from
   /// the JSON response of the randomness server (the generated randomness) and the
   /// output of `prepare_measurement` (containing the nested measurement/blinded points)
-  /// and generates a bincode-formatted aggregation message.
+  /// and generates a serialized aggregation message.
   ///
   /// The client can optionally specify any amount of additional data
   /// to be included with their message in `aux`.
@@ -102,7 +103,7 @@ pub mod client {
       aux_bytes,
       mgf.epoch(),
     )?);
-    bincode::serialize(&snm).map_err(|e| Error::Serialization(e.to_string()))
+    serialize(&snm)
   }
 
   /// Constructs a message using local randomness sampling (STARLite).
@@ -139,16 +140,17 @@ pub mod client {
       aux_bytes,
       epoch,
     )?);
-    bincode::serialize(&snm).map_err(|e| Error::Serialization(e.to_string()))
+    serialize(&snm)
   }
 }
 
 pub mod server {
   //! The server module wraps all public API functions used by the
   //! aggregation server.
+  use crate::format::*;
   use crate::internal::recover_partial_measurements;
   use crate::internal::{NestedMessage, SerializableNestedMessage};
-  use crate::{format::*, Error};
+  use crate::util::deserialize;
   use std::collections::hash_map::Entry;
   use std::collections::HashMap;
 
@@ -170,8 +172,7 @@ pub mod server {
     let mut recovery_errors = 0;
     let mut nms = Vec::<NestedMessage>::new();
     for snm_ser in snms_serialized.iter() {
-      let res = bincode::deserialize::<SerializableNestedMessage>(snm_ser)
-        .map_err(|e| Error::Serialization(e.to_string()))
+      let res = deserialize::<SerializableNestedMessage>(snm_ser)
         .and_then(NestedMessage::try_from);
       if let Ok(nm) = res {
         nms.push(nm);
